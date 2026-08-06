@@ -1,0 +1,55 @@
+WORKDAY PERFORMANCE REVIEW - 2026 Q1
+========================================
+
+Employee Name: Erik Nascimento
+Job Title: Consultor Fiscal Jr
+Manager: Bruno Mathias
+Department: Professional Service - Tax
+
+GOALS AND OBJECTIVES
+--------------------
+
+Goal 1: Liderar implementação Tax One SAP
+Description: Conduzir a implementação do sistema Tax One SAP para 5 clientes estratégicos da carteira TR
+Status: In Progress - 25% complete
+Priority: High
+
+Goal 2: Desenvolver expertise em IA aplicada a Tax
+Description: Estudar e implementar soluções de IA para otimização de processos fiscais e compliance
+Status: In Progress - 15% complete
+Priority: High
+
+Goal 3: Certificação em SAP Tax Compliance
+Description: Obter certificação oficial SAP em Tax Compliance Management
+Status: Not Started - 0% complete
+Priority: High
+
+Goal 4: Aumentar satisfação dos clientes
+Description: Atingir NPS acima de 85% em todos os projetos liderados
+Status: In Progress - 40% complete
+Priority: Medium
+
+
+STRENGTHS AND ACCOMPLISHMENTS
+-----------------------------
+
+- Excelente domínio técnico em sistemas fiscais (Tax One, SPED, SAP)
+- Proatividade em identificar oportunidades de automação
+- Comunicação clara com clientes e stakeholders internos
+- Capacidade de resolver problemas complexos de compliance fiscal
+- Entrega consistente dentro dos prazos estabelecidos
+
+
+DEVELOPMENT OPPORTUNITIES
+-------------------------
+
+- Desenvolver habilidades de liderança de equipe
+- Melhorar apresentações executivas para C-level
+- Aprofundar conhecimento em IA e Machine Learning aplicados
+- Expandir network com outros profissionais da área fiscal
+- Fortalecer inglês técnico para apresentações internacionais
+
+
+PERFORMANCE RATING: EXCEEDS EXPECTATIONS
+
+Next Review Date: July 2026

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recuperar Dados - Thomson Reuters PS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #D64000;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #D64000;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #b33600;
+        }
+        .success {
+            background: #4caf50;
+        }
+        .warning {
+            background: #ff9800;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 400px;
+        }
+        .info-box {
+            background: #e3f2fd;
+            padding: 15px;
+            border-left: 4px solid #2196f3;
+            margin: 10px 0;
+        }
+        .warning-box {
+            background: #fff3e0;
+            padding: 15px;
+            border-left: 4px solid #ff9800;
+            margin: 10px 0;
+        }
+        .error-box {
+            background: #ffebee;
+            padding: 15px;
+            border-left: 4px solid #f44336;
+            margin: 10px 0;
+        }
+        .success-box {
+            background: #e8f5e9;
+            padding: 15px;
+            border-left: 4px solid #4caf50;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #D64000;
+            color: white;
+        }
+        .key-name {
+            font-family: monospace;
+            color: #D64000;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Recuperação de Dados - Thomson Reuters PS</h1>
+
+    <div class="card">
+        <h2>📊 Diagnóstico do LocalStorage</h2>
+        <p>Vamos procurar todos os dados salvos no seu navegador:</p>
+        <button onclick="diagnosticar()">🔍 Diagnosticar Dados</button>
+        <div id="resultado-diagnostico"></div>
+    </div>
+
+    <div class="card">
+        <h2>💾 Dados Encontrados</h2>
+        <div id="dados-encontrados"></div>
+    </div>
+
+    <div class="card">
+        <h2>🔄 Recuperação de Dados</h2>
+        <div id="opcoes-recuperacao"></div>
+    </div>
+
+    <script>
+        function diagnosticar() {
+            const resultado = document.getElementById('resultado-diagnostico');
+            const dadosEncontrados = document.getElementById('dados-encontrados');
+            const opcoesRecuperacao = document.getElementById('opcoes-recuperacao');
+
+            let html = '<div class="info-box"><h3>🔍 Analisando localStorage...</h3></div>';
+
+            // Listar todas as chaves do localStorage
+            const todasChaves = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const chave = localStorage.key(i);
+                todasChaves.push(chave);
+            }
+
+            html += `<p><strong>Total de chaves encontradas:</strong> ${todasChaves.length}</p>`;
+            html += '<table><tr><th>Chave</th><th>Tamanho (bytes)</th><th>Ações</th></tr>';
+
+            const dadosRelevantes = [];
+
+            todasChaves.forEach(chave => {
+                const valor = localStorage.getItem(chave);
+                const tamanho = valor ? valor.length : 0;
+
+                // Verificar se é uma chave relevante
+                if (chave.includes('professionalTracker') || chave.includes('currentUserId')) {
+                    html += `<tr style="background: #fff3e0;">`;
+                    html += `<td class="key-name">${chave}</td>`;
+                    html += `<td>${tamanho.toLocaleString()} caracteres</td>`;
+                    html += `<td><button class="success" onclick="verDados('${chave}')">👁️ Ver Dados</button></td>`;
+                    html += `</tr>`;
+
+                    dadosRelevantes.push({ chave, valor, tamanho });
+                } else {
+                    html += `<tr>`;
+                    html += `<td>${chave}</td>`;
+                    html += `<td>${tamanho.toLocaleString()} caracteres</td>`;
+                    html += `<td>-</td>`;
+                    html += `</tr>`;
+                }
+            });
+
+            html += '</table>';
+            resultado.innerHTML = html;
+
+            // Mostrar dados relevantes
+            if (dadosRelevantes.length > 0) {
+                let dadosHtml = '<div class="success-box"><h3>✅ Encontramos dados do Professional Tracker!</h3></div>';
+
+                dadosRelevantes.forEach(item => {
+                    try {
+                        const dados = JSON.parse(item.valor);
+
+                        dadosHtml += `<div class="card" style="background: #f9f9f9; margin: 15px 0;">`;
+                        dadosHtml += `<h4>📦 Chave: <span class="key-name">${item.chave}</span></h4>`;
+
+                        if (dados.customGoals) {
+                            dadosHtml += `<p><strong>🎯 Metas:</strong> ${dados.customGoals.length}</p>`;
+                            if (dados.customGoals.length > 0) {
+                                dadosHtml += '<ul>';
+                                dados.customGoals.slice(0, 5).forEach(meta => {
+                                    dadosHtml += `<li>${meta.title || meta.description || 'Meta sem título'}</li>`;
+                                });
+                                if (dados.customGoals.length > 5) {
+                                    dadosHtml += `<li><em>... e mais ${dados.customGoals.length - 5} metas</em></li>`;
+                                }
+                                dadosHtml += '</ul>';
+                            }
+                        }
+
+                        if (dados.weeklyRecords) {
+                            dadosHtml += `<p><strong>📅 Registros Semanais:</strong> ${dados.weeklyRecords.length}</p>`;
+                        }
+
+                        if (dados.deliveries) {
+                            dadosHtml += `<p><strong>📦 Entregas:</strong> ${dados.deliveries.length}</p>`;
+                        }
+
+                        if (dados.kpis) {
+                            dadosHtml += `<p><strong>📊 KPIs:</strong> ${dados.kpis.length}</p>`;
+                        }
+
+                        if (dados.config) {
+                            dadosHtml += `<p><strong>👤 Usuário:</strong> ${dados.config.userName || 'Não definido'}</p>`;
+                        }
+
+                        dadosHtml += `<button class="success" onclick="recuperarDados('${item.chave}')">🔄 RECUPERAR ESTES DADOS</button>`;
+                        dadosHtml += `<button class="warning" onclick="verDadosCompletos('${item.chave}')">📄 Ver Detalhes</button>`;
+                        dadosHtml += `</div>`;
+
+                    } catch (e) {
+                        dadosHtml += `<div class="error-box">❌ Erro ao ler dados de <strong>${item.chave}</strong>: ${e.message}</div>`;
+                    }
+                });
+
+                dadosEncontrados.innerHTML = dadosHtml;
+            } else {
+                dadosEncontrados.innerHTML = '<div class="warning-box"><h3>⚠️ Nenhum dado do Professional Tracker encontrado</h3><p>Seus dados podem ter sido perdidos ou você está em um navegador diferente.</p></div>';
+            }
+        }
+
+        function verDados(chave) {
+            const valor = localStorage.getItem(chave);
+            try {
+                const dados = JSON.parse(valor);
+                const dadosFormatados = JSON.stringify(dados, null, 2);
+
+                const modal = window.open('', '_blank', 'width=800,height=600');
+                modal.document.write(`
+                    <html>
+                    <head>
+                        <title>Dados: ${chave}</title>
+                        <style>
+                            body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+                            pre { background: white; padding: 20px; border-radius: 8px; overflow: auto; }
+                        </style>
+                    </head>
+                    <body>
+                        <h2>📦 Dados: ${chave}</h2>
+                        <pre>${dadosFormatados}</pre>
+                    </body>
+                    </html>
+                `);
+            } catch (e) {
+                alert('Erro ao mostrar dados: ' + e.message);
+            }
+        }
+
+        function verDadosCompletos(chave) {
+            verDados(chave);
+        }
+
+        function recuperarDados(chave) {
+            if (!confirm(`Tem certeza que deseja recuperar os dados da chave "${chave}"?\n\nIsso vai copiar estes dados para o usuário atual (6137054).`)) {
+                return;
+            }
+
+            try {
+                const dadosAntigos = localStorage.getItem(chave);
+
+                // Copiar para a chave do usuário atual
+                const novaChave = 'professionalTrackerData_6137054';
+                localStorage.setItem(novaChave, dadosAntigos);
+
+                alert(`✅ SUCESSO!\n\nDados recuperados de:\n"${chave}"\n\nPara:\n"${novaChave}"\n\nAgora feche esta janela e abra o sistema novamente (index.html) e faça login com ID: 6137054`);
+
+                // Mostrar próximos passos
+                const opcoesRecuperacao = document.getElementById('opcoes-recuperacao');
+                opcoesRecuperacao.innerHTML = `
+                    <div class="success-box">
+                        <h3>✅ Dados Recuperados com Sucesso!</h3>
+                        <p><strong>Próximos passos:</strong></p>
+                        <ol>
+                            <li>Feche esta janela</li>
+                            <li>Abra o sistema principal (index.html)</li>
+                            <li>Faça login com ID: <strong>6137054</strong></li>
+                            <li>Suas metas e dados estarão de volta!</li>
+                        </ol>
+                        <button onclick="window.close()">❌ Fechar Esta Janela</button>
+                    </div>
+                `;
+
+            } catch (e) {
+                alert('❌ Erro ao recuperar dados: ' + e.message);
+            }
+        }
+
+        // Executar diagnóstico automaticamente ao carregar
+        window.onload = function() {
+            diagnosticar();
+        };
+    </script>
+</body>
+</html>

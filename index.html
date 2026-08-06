@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Service (PS) - Thomson Reuters</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+    <script>
+        // Configure PDF.js worker
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+    </script>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="login-logo">
+                <span class="logo-text" style="font-size: 36px;">Thomson Reuters</span>
+                <h2 style="margin: 10px 0;">Professional Service (PS)</h2>
+            </div>
+            <div class="login-card">
+                <h3>🔐 Acesso ao Sistema</h3>
+                <p style="color: #7A7A7A; margin-bottom: 20px;">Entre com seu ID de funcionário para acessar seus dados</p>
+
+                <form onsubmit="loginUser(event)">
+                    <div class="form-group">
+                        <label>ID do Funcionário:</label>
+                        <input type="text" id="loginUserId" placeholder="Ex: 6137054" required autofocus>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Nome Completo:</label>
+                        <input type="text" id="loginUserName" placeholder="Ex: EriK Nascimento" required>
+                    </div>
+
+                    <button type="submit" class="btn-primary" style="width: 100%; padding: 14px; font-size: 16px;">
+                        ✅ Entrar no Sistema
+                    </button>
+                </form>
+
+                <p style="font-size: 12px; color: #7A7A7A; margin-top: 20px; text-align: center;">
+                    🔒 Seus dados são salvos apenas no seu navegador e são privados
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" id="mainApp" style="display: none;">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <div class="logo">
+                        <span class="logo-text">Thomson Reuters</span>
+                    </div>
+                    <h1>Professional Service (PS)</h1>
+                </div>
+                <div class="user-info">
+                    <div class="user-details">
+                        <span class="user-name" id="userNameDisplay">Carregando...</span>
+                        <span class="user-role" id="userRoleDisplay">---</span>
+                        <span class="user-id" id="userIdDisplay">ID: ---</span>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn-icon" onclick="toggleTheme()" title="Alternar tema">
+                            <span id="theme-icon">☀️</span>
+                        </button>
+                        <button class="btn-secondary" onclick="exportData()">💾 Backup</button>
+                        <button class="btn-secondary" onclick="importData()">📥 Importar</button>
+                        <button class="btn-secondary" onclick="exportToExcel()">📊 Excel</button>
+                        <button class="btn-primary" onclick="exportToPDF()">📄 PDF</button>
+                        <button class="btn-danger" onclick="logoutUser()" title="Sair do sistema" style="margin-left: 10px;">🚪 Sair</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Notification Banner -->
+        <div id="notification-banner" class="notification-banner" style="display: none;"></div>
+
+        <!-- Navigation -->
+        <nav class="navigation">
+            <button class="nav-btn active" onclick="showSection('dashboard')">Dashboard</button>
+            <button class="nav-btn" onclick="showSection('entregas')">Entregas</button>
+            <button class="nav-btn" onclick="showSection('kpis')">KPIs</button>
+            <button class="nav-btn" onclick="showSection('weekly')">Registro Semanal</button>
+            <button class="nav-btn" onclick="showSection('avaliacoes')">Avaliações</button>
+            <button class="nav-btn" onclick="showSection('metas')">Metas</button>
+            <button class="nav-btn" onclick="showSection('config')">Configurações</button>
+        </nav>
+
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="section active">
+            <div class="section-header">
+                <h2>📊 Dashboard - <span id="currentMonth"></span></h2>
+                <div class="quick-actions">
+                    <button class="btn-secondary" onclick="generateWeeklySummary()">📝 Resumo Semanal</button>
+                    <button class="btn-secondary" onclick="generateMonthlySummary()">📈 Resumo Mensal</button>
+                    <button class="btn-primary" onclick="generatePeriodicReview()">🎯 Avaliação Periódica</button>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <!-- KPI Cards -->
+                <div class="kpi-card">
+                    <div class="kpi-icon">🎯</div>
+                    <div class="kpi-content">
+                        <h3>Entregas do Mês</h3>
+                        <p class="kpi-value" id="monthDeliveries">0</p>
+                        <span class="kpi-label">Total de entregas</span>
+                    </div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-icon">⭐</div>
+                    <div class="kpi-content">
+                        <h3>Performance Média</h3>
+                        <p class="kpi-value" id="avgPerformance">0%</p>
+                        <span class="kpi-label">Baseado em KPIs</span>
+                    </div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-icon">📈</div>
+                    <div class="kpi-content">
+                        <h3>Evolução</h3>
+                        <p class="kpi-value" id="evolution">+0%</p>
+                        <span class="kpi-label">vs mês anterior</span>
+                    </div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-icon">🔔</div>
+                    <div class="kpi-content">
+                        <h3>Próximo Lembrete</h3>
+                        <p class="kpi-value" id="nextReminder">Sexta-feira</p>
+                        <span class="kpi-label">Registro semanal</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <h3>📈 Evolução Semanal</h3>
+                    <canvas id="weeklyTrendChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3>🎯 Distribuição por Meta</h3>
+                    <canvas id="goalsDistributionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <h3>📊 KPIs Mensais</h3>
+                    <canvas id="kpiChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3>🔥 Streak de Atividades</h3>
+                    <div id="streakDisplay" class="streak-display">
+                        <div class="streak-number" id="streakNumber">0</div>
+                        <div class="streak-label">semanas consecutivas</div>
+                        <div class="streak-calendar" id="streakCalendar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="recent-activity">
+                <h3>📋 Atividades Recentes</h3>
+                <div id="recentActivityList"></div>
+            </div>
+        </section>
+
+        <!-- Entregas Section -->
+        <section id="entregas" class="section">
+            <div class="section-header">
+                <h2>🎯 Principais Entregas</h2>
+                <button class="btn-primary" onclick="openDeliveryModal()">+ Nova Entrega</button>
+            </div>
+
+            <div class="filters">
+                <input type="month" id="deliveryMonthFilter" onchange="filterDeliveries()">
+                <select id="deliveryStatusFilter" onchange="filterDeliveries()">
+                    <option value="all">Todos os Status</option>
+                    <option value="completed">Concluído</option>
+                    <option value="in-progress">Em Progresso</option>
+                    <option value="planned">Planejado</option>
+                </select>
+            </div>
+
+            <div class="deliveries-list" id="deliveriesList"></div>
+        </section>
+
+        <!-- KPIs Section -->
+        <section id="kpis" class="section">
+            <div class="section-header">
+                <h2>📈 KPIs Mensais</h2>
+                <button class="btn-primary" onclick="openKpiModal()">+ Adicionar KPI</button>
+            </div>
+
+            <div class="kpis-grid" id="kpisGrid"></div>
+        </section>
+
+        <!-- Weekly Registration Section -->
+        <section id="weekly" class="section">
+            <div class="section-header">
+                <h2>📝 Registro Semanal Detalhado</h2>
+                <p class="section-subtitle">Registre todas as suas atividades - o sistema vai relacionar com suas metas automaticamente</p>
+            </div>
+
+            <div class="weekly-form">
+                <div class="form-group">
+                    <label>Semana de:</label>
+                    <input type="week" id="weekDate" required>
+                </div>
+
+                <div class="form-group highlight-field">
+                    <label>📋 Atividades da Semana (Campo Livre - Escreva tudo!)</label>
+                    <div class="field-hint">
+                        💡 <strong>Descreva livremente suas atividades:</strong> reuniões, projetos, documentações criadas,
+                        iniciativas de IA, participação ativa em discussões, suporte a colegas, etc.
+                        <br>O sistema vai analisar e relacionar automaticamente com suas metas!
+                    </div>
+                    <textarea id="weekActivities" rows="10" placeholder="Exemplo:
+
+• Participei da reunião semanal do projeto Tax One SAP com time internacional
+• Atuei no desenvolvimento do Tax Calendar para América Latina - implementei validações de CFOP
+• Criei documentação técnica sobre integração SAP S/4HANA no Confluence
+• Desenvolvi script em Python para automatizar extração de dados fiscais (iniciativa de IA/automação)
+• Participei ativamente da daily com sugestões de melhorias no processo
+• Dei suporte ao colega Wilson na resolução de bug crítico do DPSP
+• Estudei curso de inglês avançado para projetos internacionais
+• Revisei e aprovei 3 pull requests no repositório do time
+
+Seja específico! Quanto mais detalhes, melhor o relatório para seu gestor."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>✅ Principais Conquistas</label>
+                    <textarea id="weekAchievements" rows="4" placeholder="Descreva suas principais conquistas da semana..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>🎯 Entregas Realizadas</label>
+                    <textarea id="weekDeliveries" rows="4" placeholder="Liste as entregas concluídas..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>📚 Aprendizados</label>
+                    <textarea id="weekLearnings" rows="3" placeholder="O que você aprendeu esta semana?"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>⚠️ Desafios Enfrentados</label>
+                    <textarea id="weekChallenges" rows="3" placeholder="Quais desafios você enfrentou?"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>🔜 Próximos Passos</label>
+                    <textarea id="weekNextSteps" rows="3" placeholder="O que planeja para a próxima semana?"></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn-primary btn-large" onclick="saveWeeklyRecord()">💾 Salvar Registro</button>
+                    <button class="btn-secondary btn-large" onclick="generateManagerReport()">📊 Gerar Relatório para Gestor</button>
+                </div>
+            </div>
+
+            <div class="weekly-history">
+                <h3>📚 Histórico de Registros</h3>
+
+                <!-- Search and Filters -->
+                <div class="search-filters">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="🔍 Buscar por palavra-chave..." onkeyup="filterWeeklyRecords()">
+                    </div>
+                    <div class="filter-buttons">
+                        <select id="timeFilter" onchange="filterWeeklyRecords()">
+                            <option value="all">Todos os períodos</option>
+                            <option value="week">Última semana</option>
+                            <option value="month">Último mês</option>
+                            <option value="quarter">Último trimestre</option>
+                            <option value="year">Último ano</option>
+                        </select>
+                        <select id="goalFilter" onchange="filterWeeklyRecords()">
+                            <option value="all">Todas as metas</option>
+                            <option value="customer">LOVED & TRUSTED PARTNER</option>
+                            <option value="aiRace">AI RACE</option>
+                            <option value="financepeople">Finance & People</option>
+                            <option value="internal">Internal Effectiveness</option>
+                            <option value="commonGoal">Common Goal</option>
+                            <option value="career">Desenvolvimento de Carreira</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="weeklyHistoryList"></div>
+            </div>
+        </section>
+
+        <!-- Avaliações Section -->
+        <section id="avaliacoes" class="section">
+            <div class="section-header">
+                <h2>🎯 Avaliações e Análises</h2>
+                <button class="btn-primary" onclick="generatePeriodicReview()">+ Nova Avaliação</button>
+            </div>
+
+            <div class="analysis-grid">
+                <div class="analysis-card strengths">
+                    <h3>💪 Pontos Fortes</h3>
+                    <div id="strengthsList"></div>
+                    <button class="btn-secondary" onclick="openStrengthModal()">+ Adicionar</button>
+                </div>
+
+                <div class="analysis-card opportunities">
+                    <h3>🎯 Oportunidades de Melhoria</h3>
+                    <div id="opportunitiesList"></div>
+                    <button class="btn-secondary" onclick="openOpportunityModal()">+ Adicionar</button>
+                </div>
+
+                <div class="analysis-card attention">
+                    <h3>⚠️ Pontos de Atenção</h3>
+                    <div id="attentionList"></div>
+                    <button class="btn-secondary" onclick="openAttentionModal()">+ Adicionar</button>
+                </div>
+
+                <div class="analysis-card goals">
+                    <h3>🚀 Como Avançar</h3>
+                    <div id="advanceList"></div>
+                    <button class="btn-secondary" onclick="openAdvanceModal()">+ Adicionar</button>
+                </div>
+            </div>
+
+            <div class="reviews-history">
+                <h3>📋 Histórico de Avaliações</h3>
+                <div id="reviewsHistoryList"></div>
+            </div>
+        </section>
+
+        <!-- Metas Section -->
+        <section id="metas" class="section">
+            <div class="section-header">
+                <h2>🎯 Minhas Metas</h2>
+                <div class="header-actions">
+                    <button class="btn-danger" onclick="clearWorkdayGoals()" style="margin-right: 10px;" title="Remove todas as metas importadas do Workday">📄 Limpar Workday</button>
+                    <button class="btn-danger" onclick="clearAllGoals()" style="margin-right: 10px;" title="Remove TODAS as metas (use com cuidado!)">🗑️ Limpar Tudo</button>
+                    <button class="btn-secondary" onclick="toggleSampleGoals()" style="margin-right: 10px;">👁️ Ver Exemplo</button>
+                    <button class="btn-primary" onclick="openGoalModal()">+ Nova Meta</button>
+                </div>
+            </div>
+
+            <div class="goals-info-banner">
+                <p><strong>ℹ️ Sobre esta seção:</strong> Organize suas metas por categoria. Crie metas de carreira, certificações, habilidades técnicas e muito mais! <span style="color: var(--tr-orange);">Clique em "👁️ Ver Exemplo" para visualizar (e depois ocultar) exemplos de metas organizadas.</span></p>
+            </div>
+
+            <div id="goalsCategories" class="goals-categories-container"></div>
+        </section>
+
+        <!-- Config Section -->
+        <section id="config" class="section">
+            <div class="section-header">
+                <h2>⚙️ Configurações</h2>
+            </div>
+
+            <div class="config-grid">
+                <div class="config-card">
+                    <h3>📧 Notificações por E-mail</h3>
+                    <div class="form-group">
+                        <label>E-mail para Lembretes:</label>
+                        <input type="email" id="userEmail" value="EriK.Nascimento@thomsonreuters.com">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="emailReminders" checked>
+                            Receber lembretes semanais (Sexta-feira)
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="monthlyReminders" checked>
+                            Receber lembretes mensais
+                        </label>
+                    </div>
+                    <button class="btn-primary" onclick="saveEmailConfig()">💾 Salvar</button>
+                </div>
+
+                <div class="config-card">
+                    <h3>👤 Informações Pessoais</h3>
+                    <div class="form-group">
+                        <label>Nome:</label>
+                        <input type="text" id="configName" value="EriK Nascimento">
+                    </div>
+                    <div class="form-group">
+                        <label>Cargo:</label>
+                        <input type="text" id="configRole" value="Consultor Fiscal Jr">
+                    </div>
+                    <div class="form-group">
+                        <label>Gestor:</label>
+                        <input type="text" id="configManager" value="Bruno Mathias">
+                    </div>
+                    <button class="btn-primary" onclick="savePersonalInfo()">💾 Salvar</button>
+                </div>
+
+                <div class="config-card">
+                    <h3>💾 Backup e Dados</h3>
+                    <div class="config-buttons">
+                        <button class="btn-secondary" onclick="exportData()">📥 Exportar Todos os Dados</button>
+                        <button class="btn-secondary" onclick="importData()">📤 Importar Dados</button>
+                    </div>
+                    <div class="config-buttons" style="margin-top: 20px;">
+                        <button class="btn-danger" onclick="clearAllData()">🗑️ Limpar Todos os Dados</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modals -->
+    <div id="deliveryModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('deliveryModal')">&times;</span>
+            <h2>Nova Entrega</h2>
+            <form onsubmit="saveDelivery(event)">
+                <div class="form-group">
+                    <label>Título da Entrega:</label>
+                    <input type="text" id="deliveryTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Descrição:</label>
+                    <textarea id="deliveryDescription" rows="4" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Data:</label>
+                    <input type="date" id="deliveryDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Status:</label>
+                    <select id="deliveryStatus" required>
+                        <option value="planned">Planejado</option>
+                        <option value="in-progress">Em Progresso</option>
+                        <option value="completed">Concluído</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Impacto (1-5):</label>
+                    <input type="number" id="deliveryImpact" min="1" max="5" value="3" required>
+                </div>
+                <button type="submit" class="btn-primary">Salvar</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="kpiModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('kpiModal')">&times;</span>
+            <h2>Adicionar KPI</h2>
+            <form onsubmit="saveKpi(event)">
+                <div class="form-group">
+                    <label>Nome do KPI:</label>
+                    <input type="text" id="kpiName" required>
+                </div>
+                <div class="form-group">
+                    <label>Meta:</label>
+                    <input type="number" id="kpiTarget" required>
+                </div>
+                <div class="form-group">
+                    <label>Valor Atual:</label>
+                    <input type="number" id="kpiCurrent" required>
+                </div>
+                <div class="form-group">
+                    <label>Unidade:</label>
+                    <input type="text" id="kpiUnit" placeholder="%, horas, projetos..." required>
+                </div>
+                <div class="form-group">
+                    <label>Mês:</label>
+                    <input type="month" id="kpiMonth" required>
+                </div>
+                <button type="submit" class="btn-primary">Salvar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Quick Add Modal -->
+    <div id="quickAddModal" class="modal">
+        <div class="modal-content quick-add-modal">
+            <span class="close" onclick="closeQuickAdd()">&times;</span>
+            <h2>⚡ Registro Rápido</h2>
+            <p class="quick-add-hint">Anote rapidamente o que você fez. Você pode completar os detalhes depois!</p>
+
+            <form onsubmit="saveQuickAdd(event)">
+                <div class="form-group">
+                    <label>O que você fez hoje?</label>
+                    <textarea id="quickAddText" rows="6" placeholder="Exemplo:
+• Reunião com cliente sobre Tax One SAP
+• Atualizei a documentação do projeto
+• Resolvi issue #234 no GitHub
+• Estudei Python para automação
+
+Digite livremente - o sistema vai organizar depois!" required autofocus></textarea>
+                </div>
+
+                <div class="quick-add-actions">
+                    <button type="submit" class="btn-primary btn-large">💾 Salvar Rápido</button>
+                    <button type="button" class="btn-secondary" onclick="closeQuickAdd()">Cancelar</button>
+                </div>
+            </form>
+
+            <div class="quick-add-history" id="quickAddHistory">
+                <h4>📝 Notas Rápidas Recentes (últimas 5)</h4>
+                <div id="quickAddHistoryList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Goal Modal -->
+    <div id="goalModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('goalModal')">&times;</span>
+            <h2>Nova Meta Personalizada</h2>
+            <form onsubmit="saveCustomGoal(event)">
+                <div class="form-group">
+                    <label>Título da Meta:</label>
+                    <input type="text" id="goalTitle" placeholder="Ex: Certificação AWS, Dominar Python, Liderar projeto X" required>
+                </div>
+                <div class="form-group">
+                    <label>Descrição:</label>
+                    <textarea id="goalDescription" rows="3" placeholder="Descreva sua meta e por que ela é importante para você" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Categoria:</label>
+                    <select id="goalCategory" required>
+                        <option value="carreira">📈 Carreira</option>
+                        <option value="tecnica">💻 Habilidade Técnica</option>
+                        <option value="soft-skills">🤝 Soft Skills</option>
+                        <option value="certificacao">🎓 Certificação</option>
+                        <option value="projeto">🚀 Projeto Especial</option>
+                        <option value="outros">⭐ Outros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Prazo:</label>
+                    <input type="date" id="goalDeadline" required>
+                </div>
+                <div class="form-group">
+                    <label>Prioridade:</label>
+                    <select id="goalPriority" required>
+                        <option value="alta">🔴 Alta</option>
+                        <option value="media">🟡 Média</option>
+                        <option value="baixa">🟢 Baixa</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Progresso Atual (%):</label>
+                    <input type="number" id="goalProgress" min="0" max="100" value="0" required>
+                </div>
+                <button type="submit" class="btn-primary">Salvar Meta</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Workday Import Modal -->
+    <!-- Modal do Workday REMOVIDO conforme solicitação do usuário -->
+
+    <!-- Quick Add Floating Button -->
+    <button id="quickAddBtn" class="quick-add-btn" onclick="openQuickAdd()" title="Registro Rápido (Alt+Q)">
+        <span class="quick-add-icon">⚡</span>
+        <span class="quick-add-text">Add</span>
+    </button>
+
+    <script src="app.js"></script>
+</body>
+</html>
