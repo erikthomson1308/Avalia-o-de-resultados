@@ -43,6 +43,55 @@ const APP_DATA = {
 
 // Chart instances (para evitar erro de canvas já em uso)
 let kpiChartInstance = null;
+// ===== FORMATADOR DE TEXTO PROFISSIONAL =====
+function formatTextProfessionally(text) {
+    if (!text || text.trim() === '') return '';
+
+    // Remove espaços extras e quebras de linha desnecessárias
+    text = text.trim().replace(/\s+/g, ' ');
+
+    // Separa por vírgulas, pontos ou quebras de linha
+    let items = text.split(/[,;.\n]+/).map(item => item.trim()).filter(item => item.length > 0);
+
+    // Se tiver apenas 1 item, tenta separar por "e"
+    if (items.length === 1) {
+        items = text.split(/\s+e\s+/i).map(item => item.trim()).filter(item => item.length > 0);
+    }
+
+    // Formata cada item de forma profissional
+    const formattedItems = items.map(item => {
+        // Remove artigos e preposições do início
+        item = item.replace(/^(fiz|fazi|fez|realizei|realizou|trabalhei|trabalhamos)\s+/i, '');
+
+        // Capitaliza a primeira letra
+        item = item.charAt(0).toUpperCase() + item.slice(1);
+
+        // Adiciona verbo profissional se não tiver
+        if (!/^(Condução|Elaboração|Desenvolvimento|Implementação|Análise|Coordenação|Gestão|Execução|Planejamento|Acompanhamento|Resolução|Participação|Liderança)/i.test(item)) {
+            // Adiciona verbos profissionais baseado no contexto
+            if (/reunião|meeting|encontro/i.test(item)) {
+                item = 'Condução de ' + item.charAt(0).toLowerCase() + item.slice(1);
+            } else if (/relatório|report|documento/i.test(item)) {
+                item = 'Elaboração de ' + item.charAt(0).toLowerCase() + item.slice(1);
+            } else if (/sistema|aplicação|feature|funcionalidade/i.test(item)) {
+                item = 'Desenvolvimento de ' + item.charAt(0).toLowerCase() + item.slice(1);
+            } else if (/projeto|initiative|iniciativa/i.test(item)) {
+                item = 'Coordenação de ' + item.charAt(0).toLowerCase() + item.slice(1);
+            } else if (/bug|erro|problema|issue/i.test(item)) {
+                item = 'Resolução de ' + item.charAt(0).toLowerCase() + item.slice(1);
+            } else if (/análise|estudo|investigação/i.test(item)) {
+                item = 'Realização de ' + item.charAt(0).toLowerCase() + item.slice(1);
+            } else if (/treinamento|capacitação|workshop/i.test(item)) {
+                item = 'Participação em ' + item.charAt(0).toLowerCase() + item.slice(1);
+            } else {
+                item = 'Execução de ' + item.charAt(0).toLowerCase() + item.slice(1);
+            }
+        }
+
+        return '• ' + item;
+    });
+
+    return formattedItems.join('\n');
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', function() {
