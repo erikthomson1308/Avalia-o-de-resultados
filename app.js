@@ -2585,6 +2585,296 @@ async function generateMonthlySummary() {
     showNotification('PDF mensal gerado com sucesso!', 'success');
 }
 
+// ===== NOVO: RELATÓRIO MENSAL AUTOMÁTICO (Consolida todas as semanas do mês) =====
+async function generateAutomaticMonthlyReport() {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+
+    // Filtra todas as semanas do mês atual
+    const monthWeeks = APP_DATA.weeklyRecords.filter(w => {
+        const wDate = new Date(w.date);
+        return wDate.getMonth() === currentMonth && wDate.getFullYear() === currentYear;
+    });
+
+    if (monthWeeks.length === 0) {
+        alert('Nenhum registro semanal encontrado para o mês atual. Preencha pelo menos uma semana primeiro!');
+        return;
+    }
+
+    showNotification(`Gerando relatório mensal automático com ${monthWeeks.length} semana(s)... Aguarde.`, 'info');
+
+    // Gera relatório consolidado usando as semanas filtradas
+    await generateConsolidatedReport(monthWeeks, `Mês ${currentMonth + 1}/${currentYear}`);
+}
+
+// ===== NOVO: RELATÓRIO CONSOLIDADO POR PERÍODO =====
+async function generatePeriodReport() {
+    // Cria modal para seleção de período
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+            <h3>Gerar Relatório por Período</h3>
+            <div class="form-group">
+                <label>Data Início:</label>
+                <input type="date" id="periodStart" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Data Fim:</label>
+                <input type="date" id="periodEnd" class="form-control">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="confirmPeriodReport()">Gerar Relatório</button>
+                <button class="btn-secondary" onclick="this.closest('.modal').remove()">Cancelar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Define datas padrão (início do mês até hoje)
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('periodStart').valueAsDate = firstDay;
+    document.getElementById('periodEnd').valueAsDate = today;
+}
+
+window.confirmPeriodReport = async function() {
+    const startDate = new Date(document.getElementById('periodStart').value);
+    const endDate = new Date(document.getElementById('periodEnd').value);
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        alert('Por favor, selecione as datas!');
+        return;
+    }
+
+    if (startDate > endDate) {
+        alert('A data início deve ser anterior à data fim!');
+        return;
+    }
+
+    // Filtra semanas no período
+    const periodWeeks = APP_DATA.weeklyRecords.filter(w => {
+        const wDate = new Date(w.date);
+        return wDate >= startDate && wDate <= endDate;
+    });
+
+    if (periodWeeks.length === 0) {
+        alert('Nenhum registro encontrado neste período!');
+        return;
+    }
+
+    // Fecha modal
+    document.querySelector('.modal').remove();
+
+    const periodLabel = `${startDate.toLocaleDateString('pt-BR')} a ${endDate.toLocaleDateString('pt-BR')}`;
+    showNotification(`Gerando relatório com ${periodWeeks.length} semana(s)... Aguarde.`, 'info');
+
+    await generateConsolidatedReport(periodWeeks, periodLabel);
+};
+
+// ===== FUNÇÃO AUXILIAR: Gera PDF consolidado de múltiplas semanas =====
+async function generateConsolidatedReport(weeks, periodLabel) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+        putOnlyUsedFonts: true,
+        floatPrecision: 16
+    });
+
+    const normalizeText = (text) => {
+        if (!text) return '';
+        return String(text)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/ç/g, 'c')
+            .replace(/Ç/g, 'C');
+    };
+
+    const orange = [214, 64, 0];
+    const green = [18, 48, 33];
+    const grey = [122, 122, 122];
+
+    let yPos = 20;
+
+    // Header
+    const trLogo = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjQwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjx0ZXh0IHg9IjEwIiB5PSIyOCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjI0IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI0Q2NDAwMCI+VGhvbXNvbiBSZXV0ZXJzPC90ZXh0Pjwvc3ZnPg==';
+
+    doc.setFillColor(...green);
+    doc.rect(0, 0, 210, 40, 'F');
+
+    try {
+        doc.addImage(trLogo, 'SVG', 15, 8, 60, 12);
+    } catch (e) {
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(18);
+        doc.text('Thomson Reuters', 20, 18);
+    }
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.text('Professional Service (PS)', 105, 18, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text(normalizeText(`Relatorio Consolidado - ${periodLabel}`), 105, 28, { align: 'center' });
+
+    yPos = 50;
+
+    // Employee Info
+    doc.setTextColor(...green);
+    doc.setFontSize(12);
+    doc.text(normalizeText(APP_DATA.config.userName), 20, yPos);
+    yPos += 6;
+    doc.setFontSize(10);
+    doc.setTextColor(...grey);
+    doc.text(normalizeText(APP_DATA.config.userRole), 20, yPos);
+    yPos += 5;
+    doc.text(normalizeText(`Gestor: ${APP_DATA.config.userManager}`), 20, yPos);
+    yPos += 5;
+    doc.text(normalizeText(`Periodo: ${periodLabel} | ${weeks.length} semana(s)`), 20, yPos);
+
+    yPos += 15;
+
+    // Consolida análise executiva de TODAS as semanas
+    const consolidatedAnalysis = {
+        clients: new Set(),
+        products: new Set(),
+        meetings: 0,
+        automations: 0,
+        achievements: 0,
+        configurations: 0
+    };
+
+    weeks.forEach(week => {
+        const analysis = analyzeActivitiesExecutive(week);
+        analysis.clients.forEach(c => consolidatedAnalysis.clients.add(c));
+        analysis.products.forEach(p => consolidatedAnalysis.products.add(p));
+        consolidatedAnalysis.meetings += analysis.indicators.reunioesRealizadas || 0;
+        consolidatedAnalysis.automations += analysis.automations.length;
+        consolidatedAnalysis.achievements += analysis.achievements.length;
+        consolidatedAnalysis.configurations += analysis.configurations.length;
+    });
+
+    // Resumo Executivo Consolidado
+    doc.setFillColor(240, 240, 240);
+    doc.roundedRect(15, yPos - 5, 180, 40, 3, 3, 'F');
+
+    doc.setTextColor(...orange);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('RESUMO EXECUTIVO DO PERIODO', 20, yPos);
+    yPos += 7;
+
+    doc.setTextColor(...grey);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+
+    const summary = `Periodo de alta produtividade com ${weeks.length} semana(s) registradas. Atuacao estrategica em ${consolidatedAnalysis.clients.size} cliente(s): ${Array.from(consolidatedAnalysis.clients).join(', ')}. Total de ${consolidatedAnalysis.meetings} reunioes realizadas. ${consolidatedAnalysis.automations > 0 ? `Desenvolvimento de ${consolidatedAnalysis.automations} iniciativa(s) de automacao/IA.` : ''} ${consolidatedAnalysis.achievements > 0 ? `${consolidatedAnalysis.achievements} reconhecimento(s) profissional(is) obtido(s).` : ''}`;
+
+    const summaryLines = doc.splitTextToSize(summary, 170);
+    summaryLines.forEach(line => {
+        doc.text(line, 20, yPos);
+        yPos += 4;
+    });
+
+    yPos += 15;
+
+    // Indicadores Consolidados
+    doc.setTextColor(...orange);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('INDICADORES CONSOLIDADOS', 20, yPos);
+    yPos += 8;
+
+    const indicators = [
+        { label: 'Semanas Registradas', value: weeks.length },
+        { label: 'Clientes Impactados', value: consolidatedAnalysis.clients.size },
+        { label: 'Produtos Trabalhados', value: consolidatedAnalysis.products.size },
+        { label: 'Reunioes Realizadas', value: consolidatedAnalysis.meetings },
+        { label: 'Iniciativas Estrategicas', value: consolidatedAnalysis.automations + consolidatedAnalysis.achievements }
+    ];
+
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    let xPos = 20;
+    indicators.forEach((ind, idx) => {
+        if (idx > 0 && idx % 3 === 0) {
+            yPos += 12;
+            xPos = 20;
+        }
+
+        doc.setDrawColor(...grey);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(xPos, yPos - 3, 55, 10, 2, 2, 'S');
+
+        doc.setTextColor(...green);
+        doc.setFont(undefined, 'bold');
+        doc.text(`${ind.value}`, xPos + 3, yPos + 2);
+
+        doc.setTextColor(...grey);
+        doc.setFont(undefined, 'normal');
+        doc.setFontSize(7);
+        doc.text(ind.label, xPos + 3, yPos + 6);
+        doc.setFontSize(8);
+
+        xPos += 60;
+    });
+
+    yPos += 20;
+
+    // Detalhamento por Semana
+    doc.setTextColor(...orange);
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('DETALHAMENTO POR SEMANA', 20, yPos);
+    yPos += 10;
+
+    weeks.sort((a, b) => a.week.localeCompare(b.week)).forEach((week, index) => {
+        if (yPos > 250) {
+            doc.addPage();
+            yPos = 20;
+        }
+
+        doc.setTextColor(...green);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text(normalizeText(`Semana ${index + 1}: ${week.week}`), 20, yPos);
+        yPos += 6;
+
+        doc.setTextColor(...grey);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+
+        if (week.activities) {
+            const formattedActivities = formatTextProfessionally(week.activities);
+            const normalizedActivities = normalizeText(formattedActivities);
+            const lines = doc.splitTextToSize(normalizedActivities, 170);
+            lines.slice(0, 5).forEach(line => { // Apenas primeiras 5 linhas por semana
+                if (yPos > 275) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+                doc.text(line, 25, yPos);
+                yPos += 4;
+            });
+        }
+
+        yPos += 6;
+    });
+
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(...grey);
+        doc.text(`Pagina ${i} de ${pageCount}`, 105, 290, { align: 'center' });
+    }
+
+    const fileName = `relatorio-consolidado-${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+    showNotification('Relatório consolidado gerado com sucesso!', 'success');
+}
+
 // PDF Export
 async function exportToPDF() {
     showNotification('Gerando PDF... Aguarde.');
