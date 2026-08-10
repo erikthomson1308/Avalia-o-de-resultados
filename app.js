@@ -4756,4 +4756,280 @@ function importReportData(reportData) {
     }
 }
 
+// ===== SISTEMA DE E-MAIL COM EMAILJS =====
+
+// Configuração do EmailJS
+let emailConfig = {
+    serviceId: '',
+    templateId: '',
+    publicKey: '',
+    userEmail: '',
+    weeklyReminders: false,
+    monthlyReminders: false,
+    lastReminderSent: null
+};
+
+// Carregar configuração de e-mail do localStorage
+function loadEmailConfig() {
+    const saved = localStorage.getItem('emailConfig');
+    if (saved) {
+        emailConfig = JSON.parse(saved);
+
+        // Preencher campos do formulário
+        document.getElementById('emailjsServiceId').value = emailConfig.serviceId || '';
+        document.getElementById('emailjsTemplateId').value = emailConfig.templateId || '';
+        document.getElementById('emailjsPublicKey').value = emailConfig.publicKey || '';
+        document.getElementById('userEmail').value = emailConfig.userEmail || '';
+        document.getElementById('emailReminders').checked = emailConfig.weeklyReminders || false;
+        document.getElementById('monthlyReminders').checked = emailConfig.monthlyReminders || false;
+    }
+}
+
+// Salvar configuração de e-mail
+function saveEmailConfig() {
+    emailConfig.serviceId = document.getElementById('emailjsServiceId').value.trim();
+    emailConfig.templateId = document.getElementById('emailjsTemplateId').value.trim();
+    emailConfig.publicKey = document.getElementById('emailjsPublicKey').value.trim();
+    emailConfig.userEmail = document.getElementById('userEmail').value.trim();
+    emailConfig.weeklyReminders = document.getElementById('emailReminders').checked;
+    emailConfig.monthlyReminders = document.getElementById('monthlyReminders').checked;
+
+    // Validar campos obrigatórios
+    if (!emailConfig.userEmail) {
+        showNotification('⚠️ Preencha o e-mail de destino!', 'error');
+        return;
+    }
+
+    if (emailConfig.weeklyReminders || emailConfig.monthlyReminders) {
+        if (!emailConfig.serviceId || !emailConfig.templateId || !emailConfig.publicKey) {
+            showNotification('⚠️ Preencha todas as credenciais do EmailJS!', 'error');
+            return;
+        }
+    }
+
+    // Salvar no localStorage
+    localStorage.setItem('emailConfig', JSON.stringify(emailConfig));
+
+    // Inicializar EmailJS
+    if (emailConfig.publicKey) {
+        try {
+            emailjs.init(emailConfig.publicKey);
+            showNotification('✅ Configuração salva! Lembretes ativados.', 'success');
+
+            // Iniciar verificação de lembretes
+            startReminderScheduler();
+        } catch (error) {
+            console.error('Erro ao inicializar EmailJS:', error);
+            showNotification('⚠️ Erro ao inicializar EmailJS. Verifique a Public Key.', 'error');
+        }
+    } else {
+        showNotification('✅ Configuração salva!', 'success');
+    }
+}
+
+// Enviar e-mail de teste
+async function testEmailSend() {
+    const serviceId = document.getElementById('emailjsServiceId').value.trim();
+    const templateId = document.getElementById('emailjsTemplateId').value.trim();
+    const publicKey = document.getElementById('emailjsPublicKey').value.trim();
+    const userEmail = document.getElementById('userEmail').value.trim();
+
+    if (!serviceId || !templateId || !publicKey || !userEmail) {
+        showNotification('⚠️ Preencha todos os campos antes de testar!', 'error');
+        return;
+    }
+
+    showNotification('📧 Enviando e-mail de teste...', 'info');
+
+    try {
+        // Inicializar EmailJS
+        emailjs.init(publicKey);
+
+        // Parâmetros do template
+        const templateParams = {
+            user_name: APP_DATA.config.userName || 'Usuário',
+            user_email: userEmail,
+            message_type: 'teste',
+            current_date: new Date().toLocaleDateString('pt-BR', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            })
+        };
+
+        // Enviar via EmailJS
+        const response = await emailjs.send(serviceId, templateId, templateParams);
+
+        console.log('✅ E-mail enviado:', response);
+        showNotification('✅ E-mail de teste enviado com sucesso! Verifique sua caixa de entrada.', 'success');
+
+    } catch (error) {
+        console.error('❌ Erro ao enviar e-mail:', error);
+        showNotification('❌ Erro ao enviar e-mail: ' + error.text, 'error');
+    }
+}
+
+// Enviar lembrete semanal
+async function sendWeeklyReminder() {
+    if (!emailConfig.serviceId || !emailConfig.templateId || !emailConfig.publicKey || !emailConfig.userEmail) {
+        console.log('⚠️ Configuração de e-mail incompleta. Pulando lembrete.');
+        return false;
+    }
+
+    if (!emailConfig.weeklyReminders) {
+        console.log('ℹ️ Lembretes semanais desativados.');
+        return false;
+    }
+
+    try {
+        emailjs.init(emailConfig.publicKey);
+
+        const templateParams = {
+            user_name: APP_DATA.config.userName || 'Usuário',
+            user_email: emailConfig.userEmail,
+            message_type: 'lembrete_semanal',
+            current_date: new Date().toLocaleDateString('pt-BR', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            }),
+            system_url: window.location.href
+        };
+
+        const response = await emailjs.send(
+            emailConfig.serviceId,
+            emailConfig.templateId,
+            templateParams
+        );
+
+        console.log('✅ Lembrete semanal enviado:', response);
+
+        // Atualizar data do último lembrete
+        emailConfig.lastReminderSent = new Date().toISOString();
+        localStorage.setItem('emailConfig', JSON.stringify(emailConfig));
+
+        return true;
+    } catch (error) {
+        console.error('❌ Erro ao enviar lembrete semanal:', error);
+        return false;
+    }
+}
+
+// Enviar lembrete mensal
+async function sendMonthlyReminder() {
+    if (!emailConfig.serviceId || !emailConfig.templateId || !emailConfig.publicKey || !emailConfig.userEmail) {
+        console.log('⚠️ Configuração de e-mail incompleta. Pulando lembrete.');
+        return false;
+    }
+
+    if (!emailConfig.monthlyReminders) {
+        console.log('ℹ️ Lembretes mensais desativados.');
+        return false;
+    }
+
+    try {
+        emailjs.init(emailConfig.publicKey);
+
+        const templateParams = {
+            user_name: APP_DATA.config.userName || 'Usuário',
+            user_email: emailConfig.userEmail,
+            message_type: 'lembrete_mensal',
+            current_date: new Date().toLocaleDateString('pt-BR', {
+                year: 'numeric',
+                month: 'long'
+            }),
+            system_url: window.location.href
+        };
+
+        const response = await emailjs.send(
+            emailConfig.serviceId,
+            emailConfig.templateId,
+            templateParams
+        );
+
+        console.log('✅ Lembrete mensal enviado:', response);
+
+        // Atualizar data do último lembrete
+        emailConfig.lastReminderSent = new Date().toISOString();
+        localStorage.setItem('emailConfig', JSON.stringify(emailConfig));
+
+        return true;
+    } catch (error) {
+        console.error('❌ Erro ao enviar lembrete mensal:', error);
+        return false;
+    }
+}
+
+// Verificar se deve enviar lembrete
+function checkAndSendReminders() {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Domingo, 5 = Sexta
+    const hour = now.getHours();
+    const date = now.getDate();
+
+    // Verificar se já enviou hoje
+    if (emailConfig.lastReminderSent) {
+        const lastSent = new Date(emailConfig.lastReminderSent);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        lastSent.setHours(0, 0, 0, 0);
+
+        if (lastSent.getTime() === today.getTime()) {
+            console.log('ℹ️ Lembrete já enviado hoje.');
+            return;
+        }
+    }
+
+    // Lembrete semanal: Sexta-feira às 15h
+    if (emailConfig.weeklyReminders && dayOfWeek === 5 && hour === 15) {
+        console.log('📧 Enviando lembrete semanal...');
+        sendWeeklyReminder();
+    }
+
+    // Lembrete mensal: Última sexta-feira do mês às 15h
+    if (emailConfig.monthlyReminders && dayOfWeek === 5 && hour === 15) {
+        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const daysUntilEndOfMonth = lastDayOfMonth - date;
+
+        // Se faltam menos de 7 dias para o fim do mês, é a última sexta
+        if (daysUntilEndOfMonth < 7) {
+            console.log('📧 Enviando lembrete mensal...');
+            sendMonthlyReminder();
+        }
+    }
+}
+
+// Iniciar agendador de lembretes
+function startReminderScheduler() {
+    // Verificar a cada hora
+    setInterval(() => {
+        checkAndSendReminders();
+    }, 60 * 60 * 1000); // 1 hora
+
+    // Verificar imediatamente ao carregar
+    setTimeout(() => {
+        checkAndSendReminders();
+    }, 5000); // Aguardar 5 segundos após carregar
+
+    console.log('✅ Agendador de lembretes iniciado!');
+}
+
+// Inicializar sistema de e-mail ao carregar a página
+document.addEventListener('DOMContentLoaded', () => {
+    loadEmailConfig();
+
+    // Se tiver configuração válida, iniciar agendador
+    if (emailConfig.publicKey && (emailConfig.weeklyReminders || emailConfig.monthlyReminders)) {
+        try {
+            emailjs.init(emailConfig.publicKey);
+            startReminderScheduler();
+            console.log('✅ Sistema de lembretes por e-mail ativado!');
+        } catch (error) {
+            console.error('⚠️ Erro ao inicializar EmailJS:', error);
+        }
+    }
+});
+
 

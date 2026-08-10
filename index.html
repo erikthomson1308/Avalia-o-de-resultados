@@ -10,6 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script>
         // Configure PDF.js worker
         if (typeof pdfjsLib !== 'undefined') {
@@ -377,24 +378,41 @@ Seja específico! Quanto mais detalhes, melhor o relatório para seu gestor."></
 
             <div class="config-grid">
                 <div class="config-card">
-                    <h3>📧 Notificações por E-mail</h3>
+                    <h3>📧 Configuração EmailJS</h3>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 15px;">
+                        Configure suas credenciais do EmailJS para receber lembretes automáticos por e-mail.
+                        <a href="https://www.emailjs.com/" target="_blank" style="color: var(--tr-orange);">Criar conta gratuita</a>
+                    </p>
                     <div class="form-group">
-                        <label>E-mail para Lembretes:</label>
-                        <input type="email" id="userEmail" value="EriK.Nascimento@thomsonreuters.com">
+                        <label>Service ID:</label>
+                        <input type="text" id="emailjsServiceId" placeholder="Ex: service_abc123">
+                    </div>
+                    <div class="form-group">
+                        <label>Template ID:</label>
+                        <input type="text" id="emailjsTemplateId" placeholder="Ex: template_xyz789">
+                    </div>
+                    <div class="form-group">
+                        <label>Public Key:</label>
+                        <input type="text" id="emailjsPublicKey" placeholder="Ex: user_ABC123XYZ">
+                    </div>
+                    <div class="form-group">
+                        <label>E-mail de Destino:</label>
+                        <input type="email" id="userEmail" placeholder="seu.email@thomsonreuters.com">
                     </div>
                     <div class="form-group">
                         <label>
-                            <input type="checkbox" id="emailReminders" checked>
-                            Receber lembretes semanais (Sexta-feira)
+                            <input type="checkbox" id="emailReminders">
+                            Ativar lembretes semanais (Sexta-feira às 15h)
                         </label>
                     </div>
                     <div class="form-group">
                         <label>
-                            <input type="checkbox" id="monthlyReminders" checked>
-                            Receber lembretes mensais
+                            <input type="checkbox" id="monthlyReminders">
+                            Ativar lembretes mensais (Última sexta do mês)
                         </label>
                     </div>
-                    <button class="btn-primary" onclick="saveEmailConfig()">💾 Salvar</button>
+                    <button class="btn-primary" onclick="saveEmailConfig()">💾 Salvar Configuração</button>
+                    <button class="btn-secondary" onclick="testEmailSend()" style="margin-top: 10px;">📧 Enviar E-mail Teste</button>
                 </div>
 
                 <div class="config-card">
