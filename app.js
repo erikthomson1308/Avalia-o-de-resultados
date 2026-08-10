@@ -509,7 +509,7 @@ function analyzeActivitiesExecutive(weeklyRecord) {
 }
 
 // ===== GERAR SEÇÃO DE RESUMO EXECUTIVO NO PDF =====
-function addExecutiveSummaryToPDF(doc, analysis, yPos) {
+function addExecutiveSummaryToPDF(doc, analysis, yPos, normalizeText) {
     const orange = [214, 64, 0];
     const green = [18, 48, 33];
     const grey = [122, 122, 122];
@@ -1875,7 +1875,7 @@ async function generateWeeklyManagerReport(record) {
 
     // ===== ANÁLISE EXECUTIVA (NOVO) =====
     const executiveAnalysis = analyzeActivitiesExecutive(record);
-    yPos = addExecutiveSummaryToPDF(doc, executiveAnalysis, yPos);
+    yPos = addExecutiveSummaryToPDF(doc, executiveAnalysis, yPos, normalizeText);
 
     yPos += 10;
 
