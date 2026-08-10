@@ -44,63 +44,158 @@ const APP_DATA = {
 // Chart instances (para evitar erro de canvas já em uso)
 let kpiChartInstance = null;
 
-// ===== FORMATADOR DE TEXTO PROFISSIONAL (IA AVANÇADA) =====
+// ===== FORMATADOR DE TEXTO PROFISSIONAL (IA ULTRA-AVANÇADA COM NLP) =====
 function formatTextProfessionally(text) {
     if (!text || text.trim() === '') return '';
 
     text = text.trim().replace(/\s+/g, ' ');
 
-    // Lista de projetos/produtos/clientes conhecidos da Thomson Reuters
-    const knownEntities = ['Tax One', 'Onesource', 'ONESOURCE', 'Cacau Show', 'CacauShow', 'Novartis', 'Sanofi', 'DF-e', 'DFe', 'SAP', 'Unstoppable'];
+    // Lista expandida de entidades conhecidas (case-insensitive)
+    const knownEntities = [
+        'Tax One', 'tax one for sap', 'Onesource', 'ONESOURCE',
+        'Cacau Show', 'CacauShow', 'cacaushow', 'cacau show',
+        'Novartis', 'Sanofi', 'Vantive', 'vantive dfe',
+        'DF-e', 'DFe', 'df-e', 'dfe',
+        'SAP', 'Unstoppable', 'reforma tributaria', 'reforma tributária'
+    ];
 
-    // Regex para detectar entidades (projetos/clientes/soluções)
-    const entityPattern = new RegExp(
-        `\\b(projeto|client[e]?|solução|solution|produto|product|sistema|para|no|na|do|da)\\s+(${knownEntities.join('|')}|[A-Z][a-zA-Z0-9\\s-]{2,30})`,
-        'gi'
-    );
+    // FASE 0: DETECÇÃO AVANÇADA DE ESTRUTURAS COM PARÊNTESES
+    // Ex: "projeto A, projeto B e (projeto C, projeto D, projeto E)"
+    const parenthesesPattern = /\([^)]+\)/g;
+    const parenthesesContent = [];
+    let workingText = text;
 
-    // FASE 1: SEPARAÇÃO INTELIGENTE - identifica múltiplas atividades
+    // Extrai conteúdo entre parênteses
+    let match;
+    while ((match = parenthesesPattern.exec(text)) !== null) {
+        const content = match[0].slice(1, -1); // Remove os parênteses
+        parenthesesContent.push(content);
+    }
+
+    // FASE 1: SEPARAÇÃO ULTRA-INTELIGENTE POR PADRÕES DE CONTEXTO
     let items = [];
 
-    // Primeiro separa por ponto-e-vírgula (separador forte)
-    const mainSegments = text.split(/\s*;\s*/);
+    // Separação por ponto-e-vírgula (forte)
+    const segments = text.split(/\s*;\s*/);
 
-    mainSegments.forEach(segment => {
+    segments.forEach(segment => {
         segment = segment.trim();
+        let subItems = [];
 
-        // Conta quantas entidades diferentes tem no segmento
-        const entitiesInSegment = [...segment.matchAll(entityPattern)];
+        // DETECÇÃO 1: Padrão de lista entre parênteses
+        // Ex: "(novartis tax one for sap), (cacaushow, vantive dfe) e (sanofi reforma tributaria)"
+        const listPattern = /\([^)]+\)/g;
+        const lists = [...segment.matchAll(listPattern)];
 
-        // Se tem múltiplas entidades diferentes, divide antes de cada uma
-        if (entitiesInSegment.length > 1) {
-            const uniqueEntities = [...new Set(entitiesInSegment.map(e => e[2].trim().toLowerCase()))];
-            if (uniqueEntities.length > 1) {
-                // Divide antes de cada "projeto", "para", "no", etc
-                const parts = segment.split(/(?=\b(?:projeto|client[e]?|solução|para\s+[A-Z]|no\s+[A-Z]|na\s+[A-Z]))/i);
-                items.push(...parts.filter(p => p.trim().length > 8));
-                return;
+        if (lists.length > 0) {
+            // Processa cada item entre parênteses
+            lists.forEach(list => {
+                const content = list[0].slice(1, -1).trim();
+                // Divide por vírgulas dentro dos parênteses
+                const innerItems = content.split(/,\s*/);
+                subItems.push(...innerItems.map(item => {
+                    // Verifica o contexto antes dos parênteses
+                    const beforeParentheses = segment.substring(0, list.index).trim();
+                    const contextMatch = beforeParentheses.match(/\b(reuniões? de acompanhamento|reunião|meeting|acompanhamento|projeto|configuração|da|das|de|do)\s*$/i);
+                    if (contextMatch) {
+                        return contextMatch[0] + ' ' + item;
+                    }
+                    return item;
+                }));
+            });
+
+            // Processa o que está FORA dos parênteses
+            const outsideParentheses = segment.replace(listPattern, '').trim();
+            if (outsideParentheses.length > 10) {
+                // Divide por vírgulas o que está fora
+                const outerParts = outsideParentheses.split(/,\s+/);
+                outerParts.forEach(part => {
+                    if (part.trim().length > 8) {
+                        subItems.push(part.trim());
+                    }
+                });
             }
         }
 
-        // Se não tem múltiplas entidades, tenta separar por vírgulas + ações
-        // Detecta vírgulas que separam ações diferentes
-        const actionVerbs = /\b(fiz|realizei|participei|trabalhei|configurei|desenvolvi|ganhei|criei|elaborei|implementei|coordenei)/i;
-        const commaParts = segment.split(/,\s+/);
+        // DETECÇÃO 2: Múltiplas menções de projetos/produtos conhecidos SEM parênteses
+        if (subItems.length === 0) {
+            const entityMatches = [];
+            const lowerSegment = segment.toLowerCase();
 
-        if (commaParts.length > 1) {
-            const hasMultipleActions = commaParts.filter(p => actionVerbs.test(p) || p.split(/\s+/).length > 4).length > 1;
-            if (hasMultipleActions) {
-                items.push(...commaParts);
-                return;
+            // Procura por cada entidade conhecida
+            knownEntities.forEach(entity => {
+                const entityLower = entity.toLowerCase();
+                const regex = new RegExp(`\\b${entityLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+                const matches = [...segment.matchAll(regex)];
+
+                matches.forEach(m => {
+                    entityMatches.push({
+                        entity: entity,
+                        index: m.index,
+                        length: m[0].length
+                    });
+                });
+            });
+
+            // Se encontrou múltiplas entidades, divide o texto por elas
+            if (entityMatches.length > 1) {
+                // Ordena por posição no texto
+                entityMatches.sort((a, b) => a.index - b.index);
+
+                // Extrai contexto antes de cada entidade
+                for (let i = 0; i < entityMatches.length; i++) {
+                    const current = entityMatches[i];
+                    const previous = i > 0 ? entityMatches[i - 1] : null;
+
+                    // Pega o contexto: desde o final da entidade anterior até esta
+                    const startPos = previous ? previous.index + previous.length : 0;
+                    const endPos = current.index + current.length + 50; // +50 chars após a entidade
+
+                    const chunk = segment.substring(startPos, Math.min(endPos, segment.length)).trim();
+                    if (chunk.length > 8) {
+                        subItems.push(chunk);
+                    }
+                }
+
+                // Pega o que sobrou depois da última entidade
+                const lastEntity = entityMatches[entityMatches.length - 1];
+                const remainder = segment.substring(lastEntity.index + lastEntity.length).trim();
+                if (remainder.length > 15 && !/^(e|os|o|as|a|,|\.)\s/i.test(remainder)) {
+                    subItems.push(remainder);
+                }
             }
         }
 
-        // Se não conseguiu dividir, adiciona como um único item
-        items.push(segment);
+        // DETECÇÃO 3: Palavras-chave de ação que indicam nova atividade
+        if (subItems.length === 0) {
+            const actionKeywords = /\b(fiz|realizei|participei|trabalhei|configurei|desenvolvi|ganhei|criei|elaborei|implementei|coordenei|ganho|configuracao|configuração)\s+/gi;
+            const actionMatches = [...segment.matchAll(actionKeywords)];
+
+            if (actionMatches.length > 1) {
+                // Divide antes de cada ação
+                const parts = segment.split(/(?=\b(?:fiz|realizei|participei|trabalhei|configurei|desenvolvi|ganhei|criei|elaborei|implementei|coordenei|ganho|configuracao|configuração)\s+)/i);
+                subItems.push(...parts.filter(p => p.trim().length > 8));
+            }
+        }
+
+        // DETECÇÃO 4: Frases longas com vírgulas - divide por vírgula
+        if (subItems.length === 0 && segment.length > 100) {
+            const commaParts = segment.split(/,\s+/);
+            if (commaParts.length > 1) {
+                subItems.push(...commaParts.filter(p => p.trim().length > 8));
+            }
+        }
+
+        // Se nenhuma detecção funcionou, adiciona o segmento inteiro
+        if (subItems.length === 0) {
+            subItems.push(segment);
+        }
+
+        items.push(...subItems);
     });
 
-    // Remove itens muito pequenos
-    items = items.map(i => i.trim()).filter(i => i.length > 8);
+    // Remove itens muito pequenos e duplicados
+    items = [...new Set(items.map(i => i.trim()))].filter(i => i.length > 8);
 
     // FASE 2: FORMATAÇÃO CORPORATIVA INTELIGENTE
     const formattedItems = items.map(item => {
