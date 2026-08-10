@@ -45,6 +45,8 @@ const APP_DATA = {
 let kpiChartInstance = null;
 
 // ===== FORMATADOR DE TEXTO PROFISSIONAL (IA ULTRA-AVANÇADA COM NLP) =====
+// IMPORTANTE: Esta função segue as regras do prompt de "PAPEL DA IA"
+// Ela transforma atividades literais em contribuições profissionais executivas
 function formatTextProfessionally(text) {
     if (!text || text.trim() === '') return '';
 
@@ -296,10 +298,21 @@ function formatTextProfessionally(text) {
             formatted = `Atuação no Projeto ${entityInfo.name}`;
         }
 
-        // 9. DEFAULT - já tem verbo corporativo ou adiciona
+        // 9. DEFAULT INTELIGENTE - Enriquece conforme contexto detectado
         else {
-            if (!/^(Execução|Realização|Participação|Atuação|Condução|Elaboração|Desenvolvimento|Implementação|Análise|Coordenação|Gestão|Planejamento|Acompanhamento|Resolução|Liderança|Conquista|Configuração|Atração)/i.test(item)) {
-                formatted = `Realização de ${item.charAt(0).toLowerCase() + item.slice(1)}`;
+            // Se já tem verbo corporativo, mantém
+            if (/^(Execução|Realização|Participação|Atuação|Condução|Elaboração|Desenvolvimento|Implementação|Análise|Coordenação|Gestão|Planejamento|Acompanhamento|Resolução|Liderança|Conquista|Configuração|Atração|Suporte)/i.test(item)) {
+                formatted = item;
+            }
+            // Se menciona cliente/projeto mas não tem ação específica, trata como suporte
+            else if (entityInfo) {
+                const entityType = entityInfo.type.match(/client/i) ? 'Cliente' :
+                                  entityInfo.type.match(/solução|solution/i) ? 'Solução' : 'Projeto';
+                formatted = `Suporte funcional e acompanhamento - ${entityType}: ${entityInfo.name}`;
+            }
+            // Senão, usa realização genérica
+            else {
+                formatted = `Atuação em ${item.charAt(0).toLowerCase() + item.slice(1)}`;
             }
         }
 
