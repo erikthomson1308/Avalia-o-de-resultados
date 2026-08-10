@@ -319,6 +319,308 @@ function formatTextProfessionally(text) {
     return formattedItems.join('\n');
 }
 
+// ===== ANÁLISE EXECUTIVA AVANÇADA =====
+function analyzeActivitiesExecutive(weeklyRecord) {
+    const analysis = {
+        clients: new Set(),
+        projects: new Set(),
+        products: new Set(),
+        meetings: [],
+        automations: [],
+        achievements: [],
+        configurations: [],
+        trainings: [],
+        documentation: [],
+        collaboration: [],
+        indicators: {},
+        executiveSummary: '',
+        goalAlignment: []
+    };
+
+    // Base de conhecimento expandida
+    const knownClients = ['novartis', 'sanofi', 'vantive', 'cacau show', 'cacaushow'];
+    const knownProducts = ['tax one', 'onesource', 'df-e', 'dfe', 'sap', 'mastersaf'];
+    const knownProjects = ['reforma tributaria', 'reforma tributária', 'tax one for sap'];
+
+    // Combina todas as atividades em um texto único
+    const allText = [
+        weeklyRecord.activities || '',
+        weeklyRecord.achievements || '',
+        weeklyRecord.deliveries || '',
+        weeklyRecord.learnings || '',
+        weeklyRecord.challenges || '',
+        weeklyRecord.nextSteps || ''
+    ].join(' ').toLowerCase();
+
+    // FASE 1: EXTRAÇÃO DE ENTIDADES
+
+    // Detecta clientes
+    knownClients.forEach(client => {
+        if (new RegExp(`\\b${client}\\b`, 'i').test(allText)) {
+            analysis.clients.add(client.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
+        }
+    });
+
+    // Detecta produtos
+    knownProducts.forEach(product => {
+        if (new RegExp(`\\b${product.replace(/-/g, '-?')}\\b`, 'i').test(allText)) {
+            analysis.products.add(product.toUpperCase().replace(/-/g, '-'));
+        }
+    });
+
+    // Detecta projetos
+    knownProjects.forEach(project => {
+        if (new RegExp(`\\b${project}\\b`, 'i').test(allText)) {
+            analysis.projects.add(project.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
+        }
+    });
+
+    // FASE 2: CLASSIFICAÇÃO DE ATIVIDADES
+
+    // Reuniões
+    const meetingPattern = /\b(reuni[ãa]o|meeting|acompanhamento|encontro|alinhamento)/gi;
+    const meetingMatches = allText.match(meetingPattern);
+    if (meetingMatches) {
+        analysis.meetings.push({
+            count: meetingMatches.length,
+            clients: Array.from(analysis.clients)
+        });
+    }
+
+    // Automações e IA
+    if (/\b(IA|AI|automação|automaç[ãa]o|script|python|power\s*bi)/gi.test(allText)) {
+        analysis.automations.push({
+            detected: true,
+            type: allText.match(/relatório|relatorio/i) ? 'Relatórios Automatizados' : 'Automação de Processos'
+        });
+    }
+
+    // Configurações
+    if (/\b(config|cadastr|setup|usuário|usuario|user|portal)/gi.test(allText)) {
+        analysis.configurations.push({
+            detected: true,
+            scope: Array.from(analysis.clients)[0] || 'Sistema'
+        });
+    }
+
+    // Prêmios e Reconhecimentos
+    if (/\b(pr[êe]mio|reconhecimento|conquista|unstoppable|revelação|revela[çc][ãa]o)/gi.test(allText)) {
+        const awardMatch = allText.match(/(pr[êe]mio|reconhecimento)\s+([a-zà-ú\s]+)/i);
+        analysis.achievements.push({
+            type: 'Reconhecimento',
+            name: awardMatch ? awardMatch[0] : 'Prêmio Unstoppable'
+        });
+    }
+
+    // Documentação
+    if (/\b(documento|documentação|documenta[çc][ãa]o|relatório|relatorio|apresentação|apresenta[çc][ãa]o)/gi.test(allText)) {
+        analysis.documentation.push({ detected: true });
+    }
+
+    // FASE 3: INDICADORES
+    analysis.indicators = {
+        clientesImpactados: analysis.clients.size,
+        projetosAtivos: analysis.projects.size || analysis.clients.size,
+        produtosUtilizados: analysis.products.size,
+        reunioesRealizadas: analysis.meetings.length > 0 ? analysis.meetings[0].count : 0,
+        iniciativasEstrategicas: analysis.automations.length + analysis.achievements.length,
+        configuracoesRealizadas: analysis.configurations.length,
+        documentacoesCriadas: analysis.documentation.length
+    };
+
+    // FASE 4: CRUZAMENTO COM METAS (se existirem)
+    if (APP_DATA.customGoals && APP_DATA.customGoals.length > 0) {
+        APP_DATA.customGoals.forEach(goal => {
+            const goalText = (goal.title + ' ' + goal.category).toLowerCase();
+            let relevance = 0;
+            let activities = [];
+
+            // Verifica se alguma atividade está relacionada com a meta
+            if (analysis.clients.size > 0 && /client|customer|most loved/i.test(goalText)) {
+                relevance = 3;
+                activities.push(`Atuação em ${analysis.clients.size} cliente(s): ${Array.from(analysis.clients).join(', ')}`);
+            }
+
+            if (analysis.automations.length > 0 && /IA|AI|cutting.edge|race|automação|automation/i.test(goalText)) {
+                relevance = 3;
+                activities.push('Desenvolvimento de soluções com IA/Automação');
+            }
+
+            if (analysis.achievements.length > 0 && /carreira|career|desenvolvimento|development/i.test(goalText)) {
+                relevance = 2;
+                activities.push('Reconhecimento profissional obtido');
+            }
+
+            if (relevance > 0) {
+                analysis.goalAlignment.push({
+                    goal: goal.title,
+                    relevance: relevance === 3 ? 'Alto Impacto' : relevance === 2 ? 'Médio Impacto' : 'Baixo Impacto',
+                    activities: activities,
+                    contribution: relevance === 3 ? 'Contribuição direta e mensurável' :
+                                 relevance === 2 ? 'Contribuição indireta relevante' : 'Contribuição de suporte'
+                });
+            }
+        });
+    }
+
+    // FASE 5: RESUMO EXECUTIVO INTELIGENTE
+    const summaryParts = [];
+
+    if (analysis.clients.size > 0) {
+        summaryParts.push(`Atuação estratégica em ${analysis.clients.size} cliente(s): ${Array.from(analysis.clients).join(', ')}`);
+    }
+
+    if (analysis.meetings.length > 0 && analysis.meetings[0].count > 0) {
+        summaryParts.push(`${analysis.meetings[0].count} reunião(ões) de acompanhamento realizadas`);
+    }
+
+    if (analysis.automations.length > 0) {
+        summaryParts.push('Desenvolvimento de iniciativas de automação com IA');
+    }
+
+    if (analysis.configurations.length > 0) {
+        summaryParts.push('Configurações e setup de sistemas para clientes');
+    }
+
+    if (analysis.achievements.length > 0) {
+        summaryParts.push('Reconhecimento profissional obtido');
+    }
+
+    if (summaryParts.length > 0) {
+        analysis.executiveSummary = `O colaborador demonstrou alta produtividade e alinhamento estratégico. ${summaryParts.join('. ')}.`;
+    } else {
+        analysis.executiveSummary = 'Atividades registradas com foco em execução e entrega de resultados.';
+    }
+
+    return analysis;
+}
+
+// ===== GERAR SEÇÃO DE RESUMO EXECUTIVO NO PDF =====
+function addExecutiveSummaryToPDF(doc, analysis, yPos) {
+    const orange = [214, 64, 0];
+    const green = [18, 48, 33];
+    const grey = [122, 122, 122];
+    const lightGrey = [240, 240, 240];
+
+    // Box de destaque para resumo executivo
+    doc.setFillColor(...lightGrey);
+    doc.roundedRect(15, yPos - 5, 180, 35, 3, 3, 'F');
+
+    doc.setTextColor(...orange);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('📊 RESUMO EXECUTIVO', 20, yPos);
+    yPos += 7;
+
+    doc.setTextColor(...grey);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    const summaryLines = doc.splitTextToSize(analysis.executiveSummary, 170);
+    summaryLines.forEach(line => {
+        doc.text(line, 20, yPos);
+        yPos += 4;
+    });
+
+    yPos += 10;
+
+    // Indicadores em formato de cards
+    doc.setTextColor(...orange);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('📈 INDICADORES DA SEMANA', 20, yPos);
+    yPos += 8;
+
+    const indicators = [
+        { icon: '👥', label: 'Clientes Impactados', value: analysis.indicators.clientesImpactados },
+        { icon: '📁', label: 'Projetos Ativos', value: analysis.indicators.projetosAtivos },
+        { icon: '💼', label: 'Produtos Trabalhados', value: analysis.indicators.produtosUtilizados },
+        { icon: '🤝', label: 'Reuniões Realizadas', value: analysis.indicators.reunioesRealizadas },
+        { icon: '🚀', label: 'Iniciativas Estratégicas', value: analysis.indicators.iniciativasEstrategicas }
+    ];
+
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    let xPos = 20;
+    indicators.forEach((ind, idx) => {
+        if (idx > 0 && idx % 3 === 0) {
+            yPos += 12;
+            xPos = 20;
+        }
+
+        // Box do indicador
+        doc.setDrawColor(...grey);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(xPos, yPos - 3, 55, 10, 2, 2, 'S');
+
+        doc.setTextColor(...green);
+        doc.setFont(undefined, 'bold');
+        doc.text(`${ind.icon} ${ind.value}`, xPos + 3, yPos + 2);
+
+        doc.setTextColor(...grey);
+        doc.setFont(undefined, 'normal');
+        doc.setFontSize(7);
+        doc.text(ind.label, xPos + 3, yPos + 6);
+        doc.setFontSize(8);
+
+        xPos += 60;
+    });
+
+    yPos += 18;
+
+    // Alinhamento com metas (se houver)
+    if (analysis.goalAlignment.length > 0) {
+        if (yPos > 240) {
+            doc.addPage();
+            yPos = 20;
+        }
+
+        doc.setTextColor(...orange);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('🎯 ALINHAMENTO COM METAS ESTRATÉGICAS', 20, yPos);
+        yPos += 7;
+
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+
+        analysis.goalAlignment.forEach(alignment => {
+            if (yPos > 270) {
+                doc.addPage();
+                yPos = 20;
+            }
+
+            doc.setTextColor(...green);
+            doc.setFont(undefined, 'bold');
+            doc.text(`• ${alignment.goal}`, 25, yPos);
+            yPos += 5;
+
+            doc.setTextColor(...grey);
+            doc.setFont(undefined, 'normal');
+            doc.setFontSize(8);
+            doc.text(`   Impacto: ${alignment.relevance}`, 27, yPos);
+            yPos += 4;
+
+            alignment.activities.forEach(act => {
+                const actLines = doc.splitTextToSize(`   ▸ ${act}`, 165);
+                actLines.forEach(line => {
+                    if (yPos > 275) {
+                        doc.addPage();
+                        yPos = 20;
+                    }
+                    doc.text(line, 27, yPos);
+                    yPos += 4;
+                });
+            });
+
+            yPos += 3;
+        });
+
+        yPos += 5;
+    }
+
+    return yPos;
+}
+
 // Initialize App
 document.addEventListener('DOMContentLoaded', function() {
     checkUserLogin();
@@ -1558,6 +1860,12 @@ async function generateWeeklyManagerReport(record) {
 
     yPos += 15;
 
+    // ===== ANÁLISE EXECUTIVA (NOVO) =====
+    const executiveAnalysis = analyzeActivitiesExecutive(record);
+    yPos = addExecutiveSummaryToPDF(doc, executiveAnalysis, yPos);
+
+    yPos += 10;
+
     // Atividades da Semana
     doc.setTextColor(...orange);
     doc.setFontSize(13);
@@ -2397,7 +2705,10 @@ async function exportReviewToPDF(review) {
             doc.addPage();
             yPos = 20;
         }
-        const lines = doc.splitTextToSize(`• ${s.text}`, 170);
+        // Aplica formatação profissional
+        const formattedText = formatTextProfessionally(s.text);
+        const normalizedText = normalizeText(formattedText);
+        const lines = doc.splitTextToSize(normalizedText, 170);
         lines.forEach(line => {
             doc.text(line, 25, yPos);
             yPos += 5;
@@ -2423,7 +2734,10 @@ async function exportReviewToPDF(review) {
             doc.addPage();
             yPos = 20;
         }
-        const lines = doc.splitTextToSize(`• ${o.text}`, 170);
+        // Aplica formatação profissional
+        const formattedText = formatTextProfessionally(o.text);
+        const normalizedText = normalizeText(formattedText);
+        const lines = doc.splitTextToSize(normalizedText, 170);
         lines.forEach(line => {
             doc.text(line, 25, yPos);
             yPos += 5;
@@ -2449,7 +2763,10 @@ async function exportReviewToPDF(review) {
             doc.addPage();
             yPos = 20;
         }
-        const lines = doc.splitTextToSize(`• ${a.text}`, 170);
+        // Aplica formatação profissional
+        const formattedText = formatTextProfessionally(a.text);
+        const normalizedText = normalizeText(formattedText);
+        const lines = doc.splitTextToSize(normalizedText, 170);
         lines.forEach(line => {
             doc.text(line, 25, yPos);
             yPos += 5;
@@ -2475,7 +2792,10 @@ async function exportReviewToPDF(review) {
             doc.addPage();
             yPos = 20;
         }
-        const lines = doc.splitTextToSize(`• ${a.text}`, 170);
+        // Aplica formatação profissional
+        const formattedText = formatTextProfessionally(a.text);
+        const normalizedText = normalizeText(formattedText);
+        const lines = doc.splitTextToSize(normalizedText, 170);
         lines.forEach(line => {
             doc.text(line, 25, yPos);
             yPos += 5;
