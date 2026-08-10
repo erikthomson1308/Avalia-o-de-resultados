@@ -44,52 +44,181 @@ const APP_DATA = {
 // Chart instances (para evitar erro de canvas já em uso)
 let kpiChartInstance = null;
 
-// ===== FORMATADOR DE TEXTO PROFISSIONAL =====
+// ===== FORMATADOR DE TEXTO PROFISSIONAL (IA AVANÇADA) =====
 function formatTextProfessionally(text) {
     if (!text || text.trim() === '') return '';
 
-    // Remove espaços extras e quebras de linha desnecessárias
     text = text.trim().replace(/\s+/g, ' ');
 
-    // Separa por vírgulas, pontos ou quebras de linha
-    let items = text.split(/[,;.\n]+/).map(item => item.trim()).filter(item => item.length > 0);
+    // Lista de projetos/produtos/clientes conhecidos da Thomson Reuters
+    const knownEntities = ['Tax One', 'Onesource', 'ONESOURCE', 'Cacau Show', 'CacauShow', 'Novartis', 'Sanofi', 'DF-e', 'DFe', 'SAP', 'Unstoppable'];
 
-    // Se tiver apenas 1 item, tenta separar por "e"
-    if (items.length === 1) {
-        items = text.split(/\s+e\s+/i).map(item => item.trim()).filter(item => item.length > 0);
-    }
+    // Regex para detectar entidades (projetos/clientes/soluções)
+    const entityPattern = new RegExp(
+        `\\b(projeto|client[e]?|solução|solution|produto|product|sistema|para|no|na|do|da)\\s+(${knownEntities.join('|')}|[A-Z][a-zA-Z0-9\\s-]{2,30})`,
+        'gi'
+    );
 
-    // Formata cada item de forma profissional
-    const formattedItems = items.map(item => {
-        // Remove artigos e preposições do início
-        item = item.replace(/^(fiz|fazi|fez|realizei|realizou|trabalhei|trabalhamos)\s+/i, '');
+    // FASE 1: SEPARAÇÃO INTELIGENTE - identifica múltiplas atividades
+    let items = [];
 
-        // Capitaliza a primeira letra
-        item = item.charAt(0).toUpperCase() + item.slice(1);
+    // Primeiro separa por ponto-e-vírgula (separador forte)
+    const mainSegments = text.split(/\s*;\s*/);
 
-        // Adiciona verbo profissional se não tiver
-        if (!/^(Condução|Elaboração|Desenvolvimento|Implementação|Análise|Coordenação|Gestão|Execução|Planejamento|Acompanhamento|Resolução|Participação|Liderança)/i.test(item)) {
-            // Adiciona verbos profissionais baseado no contexto
-            if (/reunião|meeting|encontro/i.test(item)) {
-                item = 'Condução de ' + item.charAt(0).toLowerCase() + item.slice(1);
-            } else if (/relatório|report|documento/i.test(item)) {
-                item = 'Elaboração de ' + item.charAt(0).toLowerCase() + item.slice(1);
-            } else if (/sistema|aplicação|feature|funcionalidade/i.test(item)) {
-                item = 'Desenvolvimento de ' + item.charAt(0).toLowerCase() + item.slice(1);
-            } else if (/projeto|initiative|iniciativa/i.test(item)) {
-                item = 'Coordenação de ' + item.charAt(0).toLowerCase() + item.slice(1);
-            } else if (/bug|erro|problema|issue/i.test(item)) {
-                item = 'Resolução de ' + item.charAt(0).toLowerCase() + item.slice(1);
-            } else if (/análise|estudo|investigação/i.test(item)) {
-                item = 'Realização de ' + item.charAt(0).toLowerCase() + item.slice(1);
-            } else if (/treinamento|capacitação|workshop/i.test(item)) {
-                item = 'Participação em ' + item.charAt(0).toLowerCase() + item.slice(1);
-            } else {
-                item = 'Execução de ' + item.charAt(0).toLowerCase() + item.slice(1);
+    mainSegments.forEach(segment => {
+        segment = segment.trim();
+
+        // Conta quantas entidades diferentes tem no segmento
+        const entitiesInSegment = [...segment.matchAll(entityPattern)];
+
+        // Se tem múltiplas entidades diferentes, divide antes de cada uma
+        if (entitiesInSegment.length > 1) {
+            const uniqueEntities = [...new Set(entitiesInSegment.map(e => e[2].trim().toLowerCase()))];
+            if (uniqueEntities.length > 1) {
+                // Divide antes de cada "projeto", "para", "no", etc
+                const parts = segment.split(/(?=\b(?:projeto|client[e]?|solução|para\s+[A-Z]|no\s+[A-Z]|na\s+[A-Z]))/i);
+                items.push(...parts.filter(p => p.trim().length > 8));
+                return;
             }
         }
 
-        return '• ' + item;
+        // Se não tem múltiplas entidades, tenta separar por vírgulas + ações
+        // Detecta vírgulas que separam ações diferentes
+        const actionVerbs = /\b(fiz|realizei|participei|trabalhei|configurei|desenvolvi|ganhei|criei|elaborei|implementei|coordenei)/i;
+        const commaParts = segment.split(/,\s+/);
+
+        if (commaParts.length > 1) {
+            const hasMultipleActions = commaParts.filter(p => actionVerbs.test(p) || p.split(/\s+/).length > 4).length > 1;
+            if (hasMultipleActions) {
+                items.push(...commaParts);
+                return;
+            }
+        }
+
+        // Se não conseguiu dividir, adiciona como um único item
+        items.push(segment);
+    });
+
+    // Remove itens muito pequenos
+    items = items.map(i => i.trim()).filter(i => i.length > 8);
+
+    // FASE 2: FORMATAÇÃO CORPORATIVA INTELIGENTE
+    const formattedItems = items.map(item => {
+        // Remove verbos informais
+        item = item.replace(/^(fiz|fazi|fez|realizei|realizou|trabalhei|trabalhamos|participei|participou|ganhei|ganhou)\s+/i, '');
+        item = item.replace(/^(a|o|de|da|do|na|no|em|para|um|uma)\s+/i, '');
+
+        // Capitaliza
+        item = item.charAt(0).toUpperCase() + item.slice(1);
+
+        // Extrai informação de projeto/cliente/solução
+        let entityInfo = null;
+        const entityMatch = item.match(/\b(projeto|client[e]?|solução|solution|produto|para|no|na)\s+([A-Z][a-zA-Z0-9\s-]+?)(?=\s*[-:,;]|\s+para|\s+no|\s+na|\s+com|\s+dentro|$)/i);
+        if (entityMatch) {
+            entityInfo = {
+                type: entityMatch[1].toLowerCase(),
+                name: entityMatch[2].trim().replace(/\s+(df-?e|sap|one|for)\b/i, ' $1')
+            };
+        }
+
+        let formatted = item;
+
+        // CATEGORIZAÇÃO INTELIGENTE POR TIPO DE ATIVIDADE
+
+        // 1. REUNIÕES / ACOMPANHAMENTOS
+        if (/\b(reuni[ãa]o|meeting|acompanhamento|encontro|alinhamento)/i.test(item)) {
+            if (entityInfo) {
+                const entityType = entityInfo.type.match(/client/i) ? 'Cliente' :
+                                  entityInfo.type.match(/solução|solution/i) ? 'Solução' :
+                                  entityInfo.type.match(/projeto/i) ? 'Projeto' : 'Sistema';
+                formatted = `Participação em reunião de acompanhamento - ${entityType}: ${entityInfo.name}`;
+            } else {
+                formatted = `Participação em ${item.charAt(0).toLowerCase() + item.slice(1)}`;
+            }
+        }
+
+        // 2. CONFIGURAÇÃO / CADASTROS / SETUP
+        else if (/\b(config|cadastr|setup|cria[çc][ãa]o|cria[çc]ao)\s+(de\s+)?(usuário|usuario|user|portal|sistema|perfil|acesso)/i.test(item)) {
+            const targetMatch = item.match(/\b(usuário|usuario|user|portal|sistema|perfil|acesso)s?\b/i);
+            const locationMatch = item.match(/\b(cacau\s*show|portal|sistema|plataforma|show)\b/i);
+
+            if (targetMatch && locationMatch) {
+                formatted = `Configuração de ${targetMatch[0].toLowerCase()}s no ${locationMatch[0]}`;
+            } else if (targetMatch) {
+                formatted = `Configuração de ${targetMatch[0].toLowerCase()}s`;
+            } else {
+                formatted = `Configuração de ${item.charAt(0).toLowerCase() + item.slice(1)}`;
+            }
+        }
+
+        // 3. DESENVOLVIMENTO / AUTOMAÇÃO / IA
+        else if (/\b(IA|AI|inteligencia|automação|automaç[ãa]o|desenvolv|implementa|cria[çc][ãa]o|gera[çc][ãa]o)\s+(de\s+|para\s+)?(relatório|relatorio|sistema|feature|funcionalidade|ferramenta|script)/i.test(item)) {
+            const purposeMatch = item.match(/(relatório|relatorio|sistema|feature|funcionalidade|ferramenta|script)s?\s+(semanal|mensal|de\s+\w+)?/i);
+
+            if (/\b(IA|AI|inteligencia|automação|automaç[ãa]o)/i.test(item)) {
+                formatted = `Desenvolvimento de ${purposeMatch ? purposeMatch[0].toLowerCase() : 'automação com IA'} para otimização de processos`;
+            } else {
+                formatted = `Desenvolvimento de ${item.charAt(0).toLowerCase() + item.slice(1)}`;
+            }
+        }
+
+        // 4. PRÊMIOS / CONQUISTAS / RECONHECIMENTOS
+        else if (/\b(pr[êe]mio|reconhecimento|conquista|award|revela[çc][ãa]o|destaque|ganho|Unstoppable)/i.test(item)) {
+            const awardMatch = item.match(/(pr[êe]mio|reconhecimento|award)\s+(de\s+|da\s+|do\s+)?([A-Z][\w\s]+?)(?=\s+da|\s+do|\s+na|\s+no|\s+de|$)/i);
+
+            if (awardMatch) {
+                formatted = `Conquista: ${awardMatch[0].trim()}`;
+            } else if (/Unstoppable/i.test(item)) {
+                formatted = 'Conquista: Prêmio Unstoppable';
+            } else {
+                formatted = `Conquista: ${item.charAt(0).toUpperCase() + item.slice(1)}`;
+            }
+        }
+
+        // 5. ATRAÇÃO / CAPTAÇÃO DE USUÁRIOS
+        else if (/\b(atra[çc][ãa]o|capta[çc][ãa]o|convite|divulga[çc][ãa]o)\s+(de\s+)?(usuário|usuario|user|cliente)/i.test(item)) {
+            formatted = `Atração de usuários para ${entityInfo ? entityInfo.name : 'a plataforma'}`;
+        }
+
+        // 6. FOTOS / EVENTOS / INTEGRAÇÃO
+        else if (/\b(foto|imagem|estagiário|estagiario|evento|integra[çc][ãa]o)/i.test(item)) {
+            if (/estagiário|estagiario/i.test(item)) {
+                formatted = 'Participação em evento de integração com estagiários';
+            } else if (/foto/i.test(item) && /atra[çc][ãa]o/i.test(item)) {
+                formatted = 'Participação em iniciativa de atração de usuários';
+            } else {
+                formatted = `Participação em ${item.charAt(0).toLowerCase() + item.slice(1)}`;
+            }
+        }
+
+        // 7. DOCUMENTAÇÃO / RELATÓRIOS
+        else if (/\b(relatório|report|documento|apresenta[çc][ãa]o|documenta[çc][ãa]o)/i.test(item)) {
+            formatted = `Elaboração de ${item.charAt(0).toLowerCase() + item.slice(1)}`;
+        }
+
+        // 8. PROJETOS GENÉRICOS
+        else if (entityInfo && /\bprojeto/i.test(item)) {
+            formatted = `Atuação no Projeto ${entityInfo.name}`;
+        }
+
+        // 9. DEFAULT - já tem verbo corporativo ou adiciona
+        else {
+            if (!/^(Execução|Realização|Participação|Atuação|Condução|Elaboração|Desenvolvimento|Implementação|Análise|Coordenação|Gestão|Planejamento|Acompanhamento|Resolução|Liderança|Conquista|Configuração|Atração)/i.test(item)) {
+                formatted = `Realização de ${item.charAt(0).toLowerCase() + item.slice(1)}`;
+            }
+        }
+
+        // Limpeza final
+        formatted = formatted
+            .replace(/\s+/g, ' ')
+            .replace(/\s+([,;.])/g, '$1')
+            .replace(/\s*[.,;]+$/, '')
+            .replace(/\s+de\s+de\s+/gi, ' de ')
+            .replace(/\s+no\s+no\s+/gi, ' no ')
+            .replace(/\s+para\s+para\s+/gi, ' para ')
+            .trim();
+
+        return '• ' + formatted;
     });
 
     return formattedItems.join('\n');
