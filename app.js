@@ -509,7 +509,7 @@ function addExecutiveSummaryToPDF(doc, analysis, yPos) {
     doc.setTextColor(...orange);
     doc.setFontSize(11);
     doc.setFont(undefined, 'bold');
-    doc.text('📊 RESUMO EXECUTIVO', 20, yPos);
+    doc.text('RESUMO EXECUTIVO', 20, yPos);
     yPos += 7;
 
     doc.setTextColor(...grey);
@@ -527,15 +527,15 @@ function addExecutiveSummaryToPDF(doc, analysis, yPos) {
     doc.setTextColor(...orange);
     doc.setFontSize(11);
     doc.setFont(undefined, 'bold');
-    doc.text('📈 INDICADORES DA SEMANA', 20, yPos);
+    doc.text('INDICADORES DA SEMANA', 20, yPos);
     yPos += 8;
 
     const indicators = [
-        { icon: '👥', label: 'Clientes Impactados', value: analysis.indicators.clientesImpactados },
-        { icon: '📁', label: 'Projetos Ativos', value: analysis.indicators.projetosAtivos },
-        { icon: '💼', label: 'Produtos Trabalhados', value: analysis.indicators.produtosUtilizados },
-        { icon: '🤝', label: 'Reuniões Realizadas', value: analysis.indicators.reunioesRealizadas },
-        { icon: '🚀', label: 'Iniciativas Estratégicas', value: analysis.indicators.iniciativasEstrategicas }
+        { icon: '', label: 'Clientes Impactados', value: analysis.indicators.clientesImpactados },
+        { icon: '', label: 'Projetos Ativos', value: analysis.indicators.projetosAtivos },
+        { icon: '', label: 'Produtos Trabalhados', value: analysis.indicators.produtosUtilizados },
+        { icon: '', label: 'Reunioes Realizadas', value: analysis.indicators.reunioesRealizadas },
+        { icon: '', label: 'Iniciativas Estrategicas', value: analysis.indicators.iniciativasEstrategicas }
     ];
 
     doc.setFontSize(8);
@@ -577,7 +577,7 @@ function addExecutiveSummaryToPDF(doc, analysis, yPos) {
         doc.setTextColor(...orange);
         doc.setFontSize(11);
         doc.setFont(undefined, 'bold');
-        doc.text('🎯 ALINHAMENTO COM METAS ESTRATÉGICAS', 20, yPos);
+        doc.text(normalizeText('ALINHAMENTO COM METAS ESTRATEGICAS'), 20, yPos);
         yPos += 7;
 
         doc.setFontSize(9);
@@ -2695,7 +2695,7 @@ async function exportReviewToPDF(review) {
     // Pontos Fortes
     doc.setTextColor(...orange);
     doc.setFontSize(12);
-    doc.text('💪 Pontos Fortes', 20, yPos);
+    doc.text('Pontos Fortes', 20, yPos);
     yPos += 7;
 
     doc.setTextColor(...grey);
@@ -2724,7 +2724,7 @@ async function exportReviewToPDF(review) {
     }
     doc.setTextColor(...orange);
     doc.setFontSize(12);
-    doc.text('🎯 Oportunidades de Melhoria', 20, yPos);
+    doc.text('Oportunidades de Melhoria', 20, yPos);
     yPos += 7;
 
     doc.setTextColor(...grey);
@@ -2753,7 +2753,7 @@ async function exportReviewToPDF(review) {
     }
     doc.setTextColor(...orange);
     doc.setFontSize(12);
-    doc.text('⚠️ Pontos de Atenção', 20, yPos);
+    doc.text('Pontos de Atencao', 20, yPos);
     yPos += 7;
 
     doc.setTextColor(...grey);
@@ -2782,7 +2782,7 @@ async function exportReviewToPDF(review) {
     }
     doc.setTextColor(...orange);
     doc.setFontSize(12);
-    doc.text('🚀 Como Avançar', 20, yPos);
+    doc.text('Como Avancar', 20, yPos);
     yPos += 7;
 
     doc.setTextColor(...grey);
