@@ -4775,13 +4775,20 @@ function loadEmailConfig() {
     if (saved) {
         emailConfig = JSON.parse(saved);
 
-        // Preencher campos do formulário
-        document.getElementById('emailjsServiceId').value = emailConfig.serviceId || '';
-        document.getElementById('emailjsTemplateId').value = emailConfig.templateId || '';
-        document.getElementById('emailjsPublicKey').value = emailConfig.publicKey || '';
-        document.getElementById('userEmail').value = emailConfig.userEmail || '';
-        document.getElementById('emailReminders').checked = emailConfig.weeklyReminders || false;
-        document.getElementById('monthlyReminders').checked = emailConfig.monthlyReminders || false;
+        // Preencher campos do formulário (com proteção se não existirem)
+        const serviceIdField = document.getElementById('emailjsServiceId');
+        const templateIdField = document.getElementById('emailjsTemplateId');
+        const publicKeyField = document.getElementById('emailjsPublicKey');
+        const userEmailField = document.getElementById('userEmail');
+        const weeklyField = document.getElementById('emailReminders');
+        const monthlyField = document.getElementById('monthlyReminders');
+
+        if (serviceIdField) serviceIdField.value = emailConfig.serviceId || '';
+        if (templateIdField) templateIdField.value = emailConfig.templateId || '';
+        if (publicKeyField) publicKeyField.value = emailConfig.publicKey || '';
+        if (userEmailField) userEmailField.value = emailConfig.userEmail || '';
+        if (weeklyField) weeklyField.checked = emailConfig.weeklyReminders || false;
+        if (monthlyField) monthlyField.checked = emailConfig.monthlyReminders || false;
     }
 }
 
@@ -4834,16 +4841,33 @@ async function testEmailSend() {
     const publicKey = document.getElementById('emailjsPublicKey').value.trim();
     const userEmail = document.getElementById('userEmail').value.trim();
 
+    console.log('🔍 testEmailSend iniciado');
+    console.log('Service ID:', serviceId);
+    console.log('Template ID:', templateId);
+    console.log('Public Key:', publicKey);
+    console.log('User Email:', userEmail);
+
     if (!serviceId || !templateId || !publicKey || !userEmail) {
         showNotification('⚠️ Preencha todos os campos antes de testar!', 'error');
         return;
     }
 
+    // Verificar se EmailJS está carregado
+    if (typeof emailjs === 'undefined') {
+        console.error('❌ EmailJS não está carregado!');
+        showNotification('❌ Biblioteca EmailJS não carregada. Recarregue a página (Ctrl+Shift+R).', 'error');
+        return;
+    }
+
+    console.log('✅ EmailJS está carregado');
+
     showNotification('📧 Enviando e-mail de teste...', 'info');
 
     try {
         // Inicializar EmailJS
+        console.log('Inicializando EmailJS com Public Key...');
         emailjs.init(publicKey);
+        console.log('✅ EmailJS inicializado');
 
         // Parâmetros do template
         const templateParams = {
@@ -4855,18 +4879,22 @@ async function testEmailSend() {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric'
-            })
+            }),
+            system_url: window.location.href
         };
+
+        console.log('📧 Enviando e-mail com parâmetros:', templateParams);
 
         // Enviar via EmailJS
         const response = await emailjs.send(serviceId, templateId, templateParams);
 
-        console.log('✅ E-mail enviado:', response);
+        console.log('✅ E-mail enviado com sucesso!', response);
         showNotification('✅ E-mail de teste enviado com sucesso! Verifique sua caixa de entrada.', 'success');
 
     } catch (error) {
         console.error('❌ Erro ao enviar e-mail:', error);
-        showNotification('❌ Erro ao enviar e-mail: ' + error.text, 'error');
+        console.error('Detalhes do erro:', error.text, error.status);
+        showNotification('❌ Erro ao enviar e-mail: ' + (error.text || error.message || 'Erro desconhecido'), 'error');
     }
 }
 
