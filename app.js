@@ -43,6 +43,7 @@ const APP_DATA = {
 
 // Chart instances (para evitar erro de canvas já em uso)
 let kpiChartInstance = null;
+
 // ===== FORMATADOR DE TEXTO PROFISSIONAL =====
 function formatTextProfessionally(text) {
     if (!text || text.trim() === '') return '';
@@ -92,7 +93,7 @@ function formatTextProfessionally(text) {
     });
 
     return formattedItems.join('\n');
-    }
+}
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', function() {
@@ -1342,7 +1343,9 @@ async function generateWeeklyManagerReport(record) {
     doc.setTextColor(...grey);
     doc.setFontSize(9);
     if (record.activities) {
-        const normalizedActivities = normalizeText(record.activities);
+        // Formatar texto de forma profissional
+        const formattedActivities = formatTextProfessionally(record.activities);
+        const normalizedActivities = normalizeText(formattedActivities);
         const lines = doc.splitTextToSize(normalizedActivities, 170);
         lines.forEach(line => {
             if (yPos > 270) {
@@ -1430,7 +1433,8 @@ async function generateWeeklyManagerReport(record) {
         doc.setFont(undefined, 'normal');
         doc.setTextColor(...grey);
         doc.setFontSize(9);
-        const achievementLines = doc.splitTextToSize(normalizeText(record.achievements), 170);
+        const formattedAchievements = formatTextProfessionally(record.achievements);
+        const achievementLines = doc.splitTextToSize(normalizeText(formattedAchievements), 170);
         achievementLines.forEach(line => {
             if (yPos > 275) {
                 doc.addPage();
@@ -1458,7 +1462,8 @@ async function generateWeeklyManagerReport(record) {
         doc.setFont(undefined, 'normal');
         doc.setTextColor(...grey);
         doc.setFontSize(9);
-        const deliveryLines = doc.splitTextToSize(normalizeText(record.deliveries), 170);
+        const formattedDeliveries = formatTextProfessionally(record.deliveries);
+        const deliveryLines = doc.splitTextToSize(normalizeText(formattedDeliveries), 170);
         deliveryLines.forEach(line => {
             if (yPos > 275) {
                 doc.addPage();
@@ -1486,7 +1491,8 @@ async function generateWeeklyManagerReport(record) {
         doc.setFont(undefined, 'normal');
         doc.setTextColor(...grey);
         doc.setFontSize(9);
-        const learningLines = doc.splitTextToSize(normalizeText(record.learnings), 170);
+        const formattedLearnings = formatTextProfessionally(record.learnings);
+        const learningLines = doc.splitTextToSize(normalizeText(formattedLearnings), 170);
         learningLines.forEach(line => {
             if (yPos > 275) {
                 doc.addPage();
@@ -1514,7 +1520,8 @@ async function generateWeeklyManagerReport(record) {
         doc.setFont(undefined, 'normal');
         doc.setTextColor(...grey);
         doc.setFontSize(9);
-        const challengeLines = doc.splitTextToSize(normalizeText(record.challenges), 170);
+        const formattedChallenges = formatTextProfessionally(record.challenges);
+        const challengeLines = doc.splitTextToSize(normalizeText(formattedChallenges), 170);
         challengeLines.forEach(line => {
             if (yPos > 275) {
                 doc.addPage();
@@ -1542,7 +1549,8 @@ async function generateWeeklyManagerReport(record) {
         doc.setFont(undefined, 'normal');
         doc.setTextColor(...grey);
         doc.setFontSize(9);
-        const nextLines = doc.splitTextToSize(normalizeText(record.nextSteps), 170);
+        const formattedNextSteps = formatTextProfessionally(record.nextSteps);
+        const nextLines = doc.splitTextToSize(normalizeText(formattedNextSteps), 170);
         nextLines.forEach(line => {
             if (yPos > 275) {
                 doc.addPage();
