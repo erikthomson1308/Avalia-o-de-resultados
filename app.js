@@ -92,6 +92,7 @@ function formatTextProfessionally(text) {
     });
 
     return formattedItems.join('\n');
+    }
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', function() {
