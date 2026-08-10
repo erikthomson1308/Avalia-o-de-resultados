@@ -326,7 +326,7 @@ function formatTextProfessionally(text) {
             .replace(/\s+para\s+para\s+/gi, ' para ')
             .trim();
 
-        return '• ' + formatted;
+        return '- ' + formatted;
     });
 
     return formattedItems.join('\n');
@@ -604,7 +604,7 @@ function addExecutiveSummaryToPDF(doc, analysis, yPos, normalizeText) {
 
             doc.setTextColor(...green);
             doc.setFont(undefined, 'bold');
-            doc.text(`• ${alignment.goal}`, 25, yPos);
+            doc.text(`- ${alignment.goal}`, 25, yPos);
             yPos += 5;
 
             doc.setTextColor(...grey);
@@ -614,7 +614,7 @@ function addExecutiveSummaryToPDF(doc, analysis, yPos, normalizeText) {
             yPos += 4;
 
             alignment.activities.forEach(act => {
-                const actLines = doc.splitTextToSize(`   ▸ ${act}`, 165);
+                const actLines = doc.splitTextToSize(`   > ${act}`, 165);
                 actLines.forEach(line => {
                     if (yPos > 275) {
                         doc.addPage();
