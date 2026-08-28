@@ -338,24 +338,45 @@ function analyzeActivitiesExecutive(weeklyRecord) {
         clients: new Set(),
         projects: new Set(),
         products: new Set(),
-        meetings: [],
         automations: [],
         achievements: [],
         configurations: [],
         trainings: [],
         documentation: [],
         collaboration: [],
+        valueDeliveries: [],
         indicators: {},
         executiveSummary: '',
         goalAlignment: []
     };
 
-    // Base de conhecimento expandida
-    const knownClients = ['novartis', 'sanofi', 'vantive', 'cacau show', 'cacaushow'];
-    const knownProducts = ['tax one', 'onesource', 'df-e', 'dfe', 'sap', 'mastersaf'];
-    const knownProjects = ['reforma tributaria', 'reforma tributária', 'tax one for sap'];
+    const knownClients = [
+        'novartis', 'sanofi', 'vantive', 'cacau show', 'cacaushow',
+        'dpsp', 'drogarias pacheco', 'drogaria sao paulo', 'drogasil',
+        'raia', 'raiadrogasil', 'ambev', 'natura', 'boticario', 'o boticario',
+        'renner', 'lojas renner', 'magalu', 'magazine luiza',
+        'carrefour', 'gpa', 'pao de acucar', 'grupo pao de acucar',
+        'itau', 'bradesco', 'santander', 'btg', 'xp',
+        'vale', 'petrobras', 'embraer', 'weg', 'totvs',
+        'bayer', 'basf', 'unilever', 'nestle', 'danone', 'pepsico',
+        'coca-cola', 'coca cola', 'ab inbev', 'heineken',
+        'toyota', 'volkswagen', 'fiat', 'stellantis', 'honda',
+        'claro', 'vivo', 'tim', 'oi', 'telefonica',
+        'jbs', 'brf', 'marfrig', 'minerva', 'cargill',
+        'gerdau', 'usiminas', 'csn', 'suzano', 'klabin',
+        'localiza', 'movida', 'azul', 'gol', 'latam',
+        'cielo', 'stone', 'pagseguro', 'nubank', 'inter',
+        'hapvida', 'notredame', 'dasa', 'fleury', 'hermes pardini',
+        'cvc', 'cogna', 'yduqs', 'kroton', 'anhanguera',
+        'raizen', 'cosan', 'vibra', 'ultrapar', 'ipiranga',
+        'loreal', 'colgate', 'procter', 'p&g', 'johnson',
+        'siemens', 'ge', 'abb', 'schneider', 'honeywell',
+        'deloitte', 'kpmg', 'ey', 'pwc', 'accenture',
+        'ibm', 'microsoft', 'oracle', 'sap', 'salesforce'
+    ];
+    const knownProducts = ['tax one', 'onesource', 'df-e', 'dfe', 'sap', 'mastersaf', 'tax calendar', 'synergy', 'checkpoint'];
+    const knownProjects = ['reforma tributaria', 'reforma tributária', 'tax one for sap', 'tax calendar'];
 
-    // Combina todas as atividades em um texto único
     const allText = [
         weeklyRecord.activities || '',
         weeklyRecord.achievements || '',
@@ -367,21 +388,30 @@ function analyzeActivitiesExecutive(weeklyRecord) {
 
     // FASE 1: EXTRAÇÃO DE ENTIDADES
 
-    // Detecta clientes
     knownClients.forEach(client => {
-        if (new RegExp(`\\b${client}\\b`, 'i').test(allText)) {
-            analysis.clients.add(client.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
+        const escaped = client.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp(`\\b${escaped}\\b`, 'i').test(allText)) {
+            const displayName = client.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            analysis.clients.add(displayName);
         }
     });
 
-    // Detecta produtos
+    // Detecção dinâmica de clientes por padrões contextuais
+    const clientPatterns = /\b(?:cliente|client|projeto(?:\s+do)?)\s+([A-Z][a-zA-ZÀ-ú\s&-]{2,25})\b/gi;
+    let clientMatch;
+    while ((clientMatch = clientPatterns.exec(weeklyRecord.activities || '')) !== null) {
+        const candidateName = clientMatch[1].trim();
+        if (candidateName.length > 2 && !/^(Tax|SAP|One|DF|AI|IA)$/i.test(candidateName)) {
+            analysis.clients.add(candidateName);
+        }
+    }
+
     knownProducts.forEach(product => {
         if (new RegExp(`\\b${product.replace(/-/g, '-?')}\\b`, 'i').test(allText)) {
             analysis.products.add(product.toUpperCase().replace(/-/g, '-'));
         }
     });
 
-    // Detecta projetos
     knownProjects.forEach(project => {
         if (new RegExp(`\\b${project}\\b`, 'i').test(allText)) {
             analysis.projects.add(project.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
@@ -390,18 +420,8 @@ function analyzeActivitiesExecutive(weeklyRecord) {
 
     // FASE 2: CLASSIFICAÇÃO DE ATIVIDADES
 
-    // Reuniões
-    const meetingPattern = /\b(reuni[ãa]o|meeting|acompanhamento|encontro|alinhamento)/gi;
-    const meetingMatches = allText.match(meetingPattern);
-    if (meetingMatches) {
-        analysis.meetings.push({
-            count: meetingMatches.length,
-            clients: Array.from(analysis.clients)
-        });
-    }
-
     // Automações e IA
-    if (/\b(IA|AI|automação|automaç[ãa]o|script|python|power\s*bi)/gi.test(allText)) {
+    if (/\b(IA|AI|automação|automaç[ãa]o|script|python|power\s*bi|chatbot|machine\s*learning|gpt|copilot|claude)/gi.test(allText)) {
         analysis.automations.push({
             detected: true,
             type: allText.match(/relatório|relatorio/i) ? 'Relatórios Automatizados' : 'Automação de Processos'
@@ -426,8 +446,34 @@ function analyzeActivitiesExecutive(weeklyRecord) {
     }
 
     // Documentação
-    if (/\b(documento|documentação|documenta[çc][ãa]o|relatório|relatorio|apresentação|apresenta[çc][ãa]o)/gi.test(allText)) {
-        analysis.documentation.push({ detected: true });
+    if (/\b(documento|documentação|documenta[çc][ãa]o|relatório|relatorio|apresentação|apresenta[çc][ãa]o|confluence|wiki)/gi.test(allText)) {
+        const docMatches = allText.match(/\b(documento|documentação|documenta[çc][ãa]o|relatório|relatorio|apresentação|apresenta[çc][ãa]o)\b/gi);
+        analysis.documentation.push({ detected: true, count: docMatches ? docMatches.length : 1 });
+    }
+
+    // Treinamentos e Estudo de Inglês
+    if (/\b(ingl[êe]s|english|curso|treinamento|capacita[çc][ãa]o|certifica[çc][ãa]o|estud|formação|forma[çc][ãa]o|udemy|coursera|alura|duolingo|fluency|speaking|listening|reading|writing|grammar|toefl|ielts|cambridge)/gi.test(allText)) {
+        const isEnglish = /\b(ingl[êe]s|english|fluency|speaking|listening|toefl|ielts|cambridge|duolingo)/gi.test(allText);
+        const trainingMatches = allText.match(/\b(curso|treinamento|capacita[çc][ãa]o|certifica[çc][ãa]o|estud|ingl[êe]s|english)\b/gi);
+        analysis.trainings.push({
+            detected: true,
+            type: isEnglish ? 'Estudo de Inglês' : 'Desenvolvimento Profissional',
+            isEnglish: isEnglish,
+            count: trainingMatches ? trainingMatches.length : 1
+        });
+    }
+
+    // Entregas de Valor (busca entregas concluídas no período)
+    if (weeklyRecord.deliveries && weeklyRecord.deliveries.trim()) {
+        const deliveryLines = weeklyRecord.deliveries.split(/[\n•\-]/).filter(l => l.trim().length > 3);
+        deliveryLines.forEach(line => {
+            analysis.valueDeliveries.push(line.trim());
+        });
+    }
+
+    // Colaboração
+    if (/\b(suporte|apoio|ajud|colabor|mentor|orientação|orienta[çc][ãa]o|pair|code\s*review|pull\s*request)/gi.test(allText)) {
+        analysis.collaboration.push({ detected: true });
     }
 
     // FASE 3: INDICADORES
@@ -435,38 +481,66 @@ function analyzeActivitiesExecutive(weeklyRecord) {
         clientesImpactados: analysis.clients.size,
         projetosAtivos: analysis.projects.size || analysis.clients.size,
         produtosUtilizados: analysis.products.size,
-        reunioesRealizadas: analysis.meetings.length > 0 ? analysis.meetings[0].count : 0,
         iniciativasEstrategicas: analysis.automations.length + analysis.achievements.length,
         configuracoesRealizadas: analysis.configurations.length,
-        documentacoesCriadas: analysis.documentation.length
+        documentacoesCriadas: analysis.documentation.length > 0 ? (analysis.documentation[0].count || 1) : 0,
+        treinamentosRealizados: analysis.trainings.length,
+        entregasDeValor: analysis.valueDeliveries.length,
+        colaboracoes: analysis.collaboration.length
     };
 
     // FASE 4: CRUZAMENTO COM METAS (se existirem)
     if (APP_DATA.customGoals && APP_DATA.customGoals.length > 0) {
         APP_DATA.customGoals.forEach(goal => {
-            const goalText = (goal.title + ' ' + goal.category).toLowerCase();
+            const goalText = (goal.title + ' ' + (goal.description || '') + ' ' + goal.category).toLowerCase();
             let relevance = 0;
             let activities = [];
 
-            // Verifica se alguma atividade está relacionada com a meta
-            if (analysis.clients.size > 0 && /client|customer|most loved/i.test(goalText)) {
+            if (analysis.clients.size > 0 && /client|customer|most loved|trusted|partner|atendimento/i.test(goalText)) {
                 relevance = 3;
                 activities.push(`Atuação em ${analysis.clients.size} cliente(s): ${Array.from(analysis.clients).join(', ')}`);
             }
 
-            if (analysis.automations.length > 0 && /IA|AI|cutting.edge|race|automação|automation/i.test(goalText)) {
+            if (analysis.automations.length > 0 && /IA|AI|cutting.edge|race|automação|automation|intelig[êe]ncia|digital/i.test(goalText)) {
                 relevance = 3;
                 activities.push('Desenvolvimento de soluções com IA/Automação');
             }
 
-            if (analysis.achievements.length > 0 && /carreira|career|desenvolvimento|development/i.test(goalText)) {
-                relevance = 2;
+            if (analysis.trainings.length > 0 && /ingl[êe]s|english|idioma|l[íi]ngua|internacional|capacita|treinamento|curso|certifica/i.test(goalText)) {
+                relevance = Math.max(relevance, 2);
+                const englishTraining = analysis.trainings.find(t => t.isEnglish);
+                activities.push(englishTraining ? 'Estudo de Inglês para projetos internacionais' : 'Treinamento e capacitação profissional');
+            }
+
+            if (analysis.documentation.length > 0 && /document|padroniza|processo|internal|reimagine|efici[êe]ncia/i.test(goalText)) {
+                relevance = Math.max(relevance, 2);
+                activities.push(`Documentação e padronização (${analysis.indicators.documentacoesCriadas} doc(s))`);
+            }
+
+            if (analysis.achievements.length > 0 && /carreira|career|desenvolvimento|development|crescimento/i.test(goalText)) {
+                relevance = Math.max(relevance, 2);
                 activities.push('Reconhecimento profissional obtido');
+            }
+
+            if (analysis.valueDeliveries.length > 0 && /entrega|delivery|resultado|performance|produtividade/i.test(goalText)) {
+                relevance = Math.max(relevance, 2);
+                activities.push(`${analysis.valueDeliveries.length} entrega(s) de valor realizadas`);
+            }
+
+            if (analysis.configurations.length > 0 && /config|setup|implanta|implementa|tecni/i.test(goalText)) {
+                relevance = Math.max(relevance, 2);
+                activities.push('Configurações técnicas e setup de sistemas');
+            }
+
+            if (analysis.collaboration.length > 0 && /colabora|equipe|team|people|finance.*people|soft.*skill/i.test(goalText)) {
+                relevance = Math.max(relevance, 1);
+                activities.push('Colaboração e suporte entre equipes');
             }
 
             if (relevance > 0) {
                 analysis.goalAlignment.push({
                     goal: goal.title,
+                    category: goal.category || '',
                     relevance: relevance === 3 ? 'Alto Impacto' : relevance === 2 ? 'Médio Impacto' : 'Baixo Impacto',
                     activities: activities,
                     contribution: relevance === 3 ? 'Contribuição direta e mensurável' :
@@ -483,12 +557,29 @@ function analyzeActivitiesExecutive(weeklyRecord) {
         summaryParts.push(`Atuação estratégica em ${analysis.clients.size} cliente(s): ${Array.from(analysis.clients).join(', ')}`);
     }
 
-    if (analysis.meetings.length > 0 && analysis.meetings[0].count > 0) {
-        summaryParts.push(`${analysis.meetings[0].count} reunião(ões) de acompanhamento realizadas`);
+    if (analysis.products.size > 0) {
+        summaryParts.push(`Trabalho com ${analysis.products.size} produto(s): ${Array.from(analysis.products).join(', ')}`);
     }
 
     if (analysis.automations.length > 0) {
-        summaryParts.push('Desenvolvimento de iniciativas de automação com IA');
+        summaryParts.push(`${analysis.automations.length} iniciativa(s) de automação/IA`);
+    }
+
+    if (analysis.valueDeliveries.length > 0) {
+        summaryParts.push(`${analysis.valueDeliveries.length} entrega(s) de valor concluída(s)`);
+    }
+
+    if (analysis.trainings.length > 0) {
+        const englishTraining = analysis.trainings.find(t => t.isEnglish);
+        if (englishTraining) {
+            summaryParts.push('Desenvolvimento em Inglês para atuação internacional');
+        } else {
+            summaryParts.push('Investimento em capacitação e desenvolvimento profissional');
+        }
+    }
+
+    if (analysis.documentation.length > 0) {
+        summaryParts.push(`${analysis.indicators.documentacoesCriadas} documentação(ões) elaborada(s)`);
     }
 
     if (analysis.configurations.length > 0) {
@@ -497,6 +588,10 @@ function analyzeActivitiesExecutive(weeklyRecord) {
 
     if (analysis.achievements.length > 0) {
         summaryParts.push('Reconhecimento profissional obtido');
+    }
+
+    if (analysis.collaboration.length > 0) {
+        summaryParts.push('Colaboração e suporte ativo entre equipes');
     }
 
     if (summaryParts.length > 0) {
@@ -544,11 +639,12 @@ function addExecutiveSummaryToPDF(doc, analysis, yPos, normalizeText) {
     yPos += 8;
 
     const indicators = [
-        { icon: '', label: 'Clientes Impactados', value: analysis.indicators.clientesImpactados },
-        { icon: '', label: 'Projetos Ativos', value: analysis.indicators.projetosAtivos },
-        { icon: '', label: 'Produtos Trabalhados', value: analysis.indicators.produtosUtilizados },
-        { icon: '', label: 'Reunioes Realizadas', value: analysis.indicators.reunioesRealizadas },
-        { icon: '', label: 'Iniciativas Estrategicas', value: analysis.indicators.iniciativasEstrategicas }
+        { label: 'Clientes Impactados', value: analysis.indicators.clientesImpactados },
+        { label: 'Produtos Trabalhados', value: analysis.indicators.produtosUtilizados },
+        { label: 'Entregas de Valor', value: analysis.indicators.entregasDeValor || 0 },
+        { label: 'Iniciativas Estrategicas', value: analysis.indicators.iniciativasEstrategicas },
+        { label: 'Treinamentos', value: analysis.indicators.treinamentosRealizados || 0 },
+        { label: 'Documentacoes', value: analysis.indicators.documentacoesCriadas || 0 }
     ];
 
     doc.setFontSize(8);
@@ -2376,99 +2472,240 @@ async function generateMonthlySummary() {
     yPos += 5;
     doc.text(normalizeText(`Gerado em: ${today.toLocaleDateString('pt-BR')}`), 20, yPos);
 
-    yPos += 15;
+    yPos += 12;
 
-    // Statistics Box
-    doc.setFillColor(249, 247, 245);
-    doc.rect(15, yPos - 5, 180, 35, 'F');
-    doc.setDrawColor(...orange);
-    doc.setLineWidth(0.5);
-    doc.rect(15, yPos - 5, 180, 35);
+    // Análise executiva consolidada de todas as semanas do mês
+    const monthAnalysis = {
+        clients: new Set(),
+        products: new Set(),
+        automations: 0,
+        achievements: 0,
+        trainings: 0,
+        hasEnglish: false,
+        documentation: 0,
+        valueDeliveries: [],
+        collaboration: 0,
+        goalAlignments: new Map()
+    };
 
-    doc.setTextColor(...orange);
-    doc.setFontSize(13);
-    doc.setFont(undefined, 'bold');
-    doc.text(normalizeText('ESTATISTICAS DO MES'), 20, yPos);
-    yPos += 8;
-
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(...grey);
-    doc.setFontSize(10);
-
-    const completedDeliveries = monthDeliveries.filter(d => d.status === 'completed').length;
-    const avgKpiPerformance = monthKpis.length > 0
-        ? (monthKpis.reduce((sum, k) => sum + (k.current / k.target * 100), 0) / monthKpis.length).toFixed(1)
-        : 0;
-
-    const comparison = prevMonthWeeks.length > 0
-        ? ((monthWeeks.length - prevMonthWeeks.length) / prevMonthWeeks.length * 100).toFixed(1)
-        : 0;
-
-    doc.text(normalizeText(`• Total de Entregas: ${monthDeliveries.length} (${completedDeliveries} concluidas)`), 25, yPos);
-    yPos += 5;
-    doc.text(normalizeText(`• Registros Semanais: ${monthWeeks.length} (${comparison > 0 ? '+' : ''}${comparison}% vs mes anterior)`), 25, yPos);
-    yPos += 5;
-    doc.text(normalizeText(`• Performance Media KPIs: ${avgKpiPerformance}%`), 25, yPos);
-    yPos += 5;
-    doc.text(normalizeText(`• KPIs Acompanhados: ${monthKpis.length}`), 25, yPos);
-
-    yPos += 15;
-
-    // Weekly Evolution
-    if (monthWeeks.length > 0) {
-        doc.setTextColor(...orange);
-        doc.setFontSize(12);
-        doc.setFont(undefined, 'bold');
-        doc.text(normalizeText('EVOLUCAO SEMANAL'), 20, yPos);
-        yPos += 7;
-
-        doc.setFont(undefined, 'normal');
-        doc.setTextColor(...grey);
-        doc.setFontSize(9);
-
-        monthWeeks.sort((a, b) => a.week.localeCompare(b.week)).forEach((week, index) => {
-            if (yPos > 270) {
-                doc.addPage();
-                yPos = 20;
+    monthWeeks.forEach(week => {
+        const analysis = analyzeActivitiesExecutive(week);
+        analysis.clients.forEach(c => monthAnalysis.clients.add(c));
+        analysis.products.forEach(p => monthAnalysis.products.add(p));
+        monthAnalysis.automations += analysis.automations.length;
+        monthAnalysis.achievements += analysis.achievements.length;
+        monthAnalysis.trainings += analysis.trainings.length;
+        monthAnalysis.documentation += analysis.indicators.documentacoesCriadas || 0;
+        monthAnalysis.collaboration += analysis.collaboration.length;
+        if (analysis.trainings.some(t => t.isEnglish)) monthAnalysis.hasEnglish = true;
+        if (analysis.valueDeliveries.length > 0) {
+            monthAnalysis.valueDeliveries.push(...analysis.valueDeliveries);
+        }
+        analysis.goalAlignment.forEach(ga => {
+            if (!monthAnalysis.goalAlignments.has(ga.goal)) {
+                monthAnalysis.goalAlignments.set(ga.goal, {
+                    goal: ga.goal, category: ga.category || '',
+                    relevance: ga.relevance, activities: new Set(),
+                    contribution: ga.contribution, weeksActive: 0
+                });
             }
-
-            const activityCount = week.goalsAlignment
-                ? Object.values(week.goalsAlignment).reduce((sum, arr) => sum + arr.length, 0)
-                : 0;
-
-            doc.text(normalizeText(`Semana ${index + 1} (${week.week}): ${activityCount} atividades registradas`), 25, yPos);
-            yPos += 5;
+            const existing = monthAnalysis.goalAlignments.get(ga.goal);
+            ga.activities.forEach(a => existing.activities.add(a));
+            existing.weeksActive++;
+            if (ga.relevance === 'Alto Impacto') existing.relevance = 'Alto Impacto';
         });
+    });
 
-        yPos += 10;
+    // ===== RESUMO EXECUTIVO DO MÊS =====
+    const execParts = [];
+    execParts.push(`Periodo de alta produtividade com ${monthWeeks.length} semana(s) registradas`);
+    if (monthAnalysis.clients.size > 0) {
+        execParts.push(`Atuacao estrategica em ${monthAnalysis.clients.size} cliente(s): ${Array.from(monthAnalysis.clients).join(', ')}`);
+    }
+    if (monthAnalysis.products.size > 0) {
+        execParts.push(`Trabalho com ${monthAnalysis.products.size} produto(s): ${Array.from(monthAnalysis.products).join(', ')}`);
+    }
+    if (monthAnalysis.valueDeliveries.length > 0) {
+        execParts.push(`${monthAnalysis.valueDeliveries.length} entrega(s) de valor realizadas`);
+    }
+    if (monthAnalysis.automations > 0) {
+        execParts.push(`${monthAnalysis.automations} iniciativa(s) de automacao/IA`);
+    }
+    if (monthAnalysis.hasEnglish) {
+        execParts.push('Desenvolvimento continuo em Ingles para atuacao internacional');
+    } else if (monthAnalysis.trainings > 0) {
+        execParts.push(`${monthAnalysis.trainings} atividade(s) de capacitacao profissional`);
+    }
+    if (monthAnalysis.documentation > 0) {
+        execParts.push(`${monthAnalysis.documentation} documentacao(oes) elaborada(s)`);
+    }
+    if (monthAnalysis.achievements > 0) {
+        execParts.push(`${monthAnalysis.achievements} reconhecimento(s) profissional(is)`);
+    }
+    if (monthAnalysis.collaboration > 0) {
+        execParts.push('Colaboracao e suporte ativo entre equipes');
     }
 
-    // Goals Alignment Summary
-    if (monthWeeks.length > 0) {
-        if (yPos > 240) {
-            doc.addPage();
-            yPos = 20;
+    const execSummary = execParts.join('. ') + '.';
+    const execLines = doc.splitTextToSize(execSummary, 170);
+    const execHeight = Math.max(35, execLines.length * 4 + 15);
+
+    doc.setFillColor(240, 240, 240);
+    doc.roundedRect(15, yPos - 5, 180, execHeight, 3, 3, 'F');
+
+    doc.setTextColor(...orange);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('RESUMO EXECUTIVO DO MES', 20, yPos);
+    yPos += 7;
+
+    doc.setTextColor(...grey);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    execLines.forEach(line => {
+        doc.text(line, 20, yPos);
+        yPos += 4;
+    });
+
+    yPos += execHeight - execLines.length * 4 + 5;
+
+    // ===== INDICADORES CONSOLIDADOS =====
+    doc.setTextColor(...orange);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('INDICADORES DO MES', 20, yPos);
+    yPos += 8;
+
+    const completedDeliveries = monthDeliveries.filter(d => d.status === 'completed').length;
+
+    const monthIndicators = [
+        { label: 'Semanas Registradas', value: monthWeeks.length },
+        { label: 'Clientes Impactados', value: monthAnalysis.clients.size },
+        { label: 'Produtos Trabalhados', value: monthAnalysis.products.size },
+        { label: 'Entregas de Valor', value: monthAnalysis.valueDeliveries.length },
+        { label: 'Iniciativas IA', value: monthAnalysis.automations + monthAnalysis.achievements },
+        { label: 'Capacitacao/Ingles', value: monthAnalysis.trainings }
+    ];
+
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    let xPos = 20;
+    monthIndicators.forEach((ind, idx) => {
+        if (idx > 0 && idx % 3 === 0) {
+            yPos += 12;
+            xPos = 20;
         }
+
+        doc.setFillColor(249, 247, 245);
+        doc.setDrawColor(...orange);
+        doc.setLineWidth(0.4);
+        doc.roundedRect(xPos, yPos - 3, 55, 10, 2, 2, 'FD');
+
+        doc.setTextColor(...green);
+        doc.setFont(undefined, 'bold');
+        doc.setFontSize(10);
+        doc.text(`${ind.value}`, xPos + 3, yPos + 2);
+
+        doc.setTextColor(...grey);
+        doc.setFont(undefined, 'normal');
+        doc.setFontSize(7);
+        doc.text(ind.label, xPos + 3, yPos + 6);
+        doc.setFontSize(8);
+
+        xPos += 60;
+    });
+
+    yPos += 20;
+
+    // ===== ENTREGAS DE VALOR =====
+    const allValueDeliveries = [...new Set(monthAnalysis.valueDeliveries)];
+    if (allValueDeliveries.length > 0 || monthDeliveries.length > 0) {
+        if (yPos > 240) { doc.addPage(); yPos = 20; }
+
+        doc.setFillColor(...teal);
+        doc.rect(15, yPos - 5, 180, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('ENTREGAS DE VALOR DO MES', 20, yPos);
+        yPos += 10;
+
+        doc.setTextColor(...grey);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+
+        // Entregas dos registros semanais
+        allValueDeliveries.slice(0, 10).forEach(delivery => {
+            if (yPos > 275) { doc.addPage(); yPos = 20; }
+            const lines = doc.splitTextToSize(normalizeText(`- ${delivery}`), 165);
+            lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+        });
+
+        // Entregas do módulo de entregas
+        monthDeliveries.slice(0, 10).forEach(d => {
+            if (yPos > 275) { doc.addPage(); yPos = 20; }
+            const statusText = getStatusText(d.status);
+            const lines = doc.splitTextToSize(normalizeText(`- ${d.title} [${statusText}]`), 165);
+            lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+        });
+        yPos += 8;
+    }
+
+    // ===== DESENVOLVIMENTO E CAPACITAÇÃO =====
+    if (monthAnalysis.trainings > 0 || monthAnalysis.hasEnglish) {
+        if (yPos > 250) { doc.addPage(); yPos = 20; }
+
+        doc.setFillColor(...sky);
+        doc.rect(15, yPos - 5, 180, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('DESENVOLVIMENTO E CAPACITACAO', 20, yPos);
+        yPos += 10;
+
+        doc.setTextColor(...grey);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+
+        if (monthAnalysis.hasEnglish) {
+            doc.text(normalizeText('- Estudo de Ingles: investimento continuo para atuacao em projetos internacionais'), 25, yPos);
+            yPos += 5;
+        }
+        if (monthAnalysis.trainings > 0) {
+            doc.text(normalizeText(`- ${monthAnalysis.trainings} atividade(s) de capacitacao profissional no mes`), 25, yPos);
+            yPos += 5;
+        }
+        yPos += 5;
+    }
+
+    // ===== ALINHAMENTO COM METAS ESTRATÉGICAS (VISÃO DO GESTOR) =====
+    const hasMonthGoals = monthWeeks.some(w => w.goalsAlignment && Object.values(w.goalsAlignment).some(arr => arr && arr.length > 0));
+
+    if (hasMonthGoals || monthAnalysis.goalAlignments.size > 0) {
+        if (yPos > 220) { doc.addPage(); yPos = 20; }
 
         doc.setFillColor(...orange);
         doc.rect(15, yPos - 5, 180, 8, 'F');
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(12);
-        doc.text(normalizeText('ALINHAMENTO COM METAS ESTRATEGICAS (CONSOLIDADO)'), 20, yPos);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('ALINHAMENTO COM METAS ESTRATEGICAS', 20, yPos);
         yPos += 12;
 
-        const consolidatedGoals = {
-            customer: [],
-            aiRace: [],
-            financepeople: [],
-            internal: [],
-            commonGoal: [],
-            career: []
+        const goalLabels = {
+            customer: 'Customer - Most LOVED & TRUSTED PARTNER',
+            aiRace: 'AI Race - Cutting-edge AI SOLUTIONS',
+            financepeople: 'Finance + People',
+            internal: 'Internal - REIMAGINE with AI',
+            commonGoal: 'Objetivo Comum - Transformacao da IA',
+            career: 'Metas de Carreira'
         };
 
+        const consolidatedGoals = {};
         monthWeeks.forEach(week => {
             if (week.goalsAlignment) {
-                Object.keys(consolidatedGoals).forEach(key => {
+                Object.keys(week.goalsAlignment).forEach(key => {
+                    if (!consolidatedGoals[key]) consolidatedGoals[key] = [];
                     if (week.goalsAlignment[key]) {
                         consolidatedGoals[key].push(...week.goalsAlignment[key]);
                     }
@@ -2476,75 +2713,76 @@ async function generateMonthlySummary() {
             }
         });
 
-        const goalLabels = {
-            customer: normalizeText('Customer - Most LOVED & TRUSTED PARTNER'),
-            aiRace: normalizeText('AI Race - Cutting-edge AI SOLUTIONS'),
-            financepeople: normalizeText('Finance + People'),
-            internal: normalizeText('Internal - REIMAGINE with AI'),
-            commonGoal: normalizeText('Objetivo Comum - Transformacao da IA'),
-            career: normalizeText('Metas de Carreira')
-        };
-
         Object.entries(consolidatedGoals).forEach(([key, items]) => {
             if (items.length > 0) {
-                if (yPos > 260) {
-                    doc.addPage();
-                    yPos = 20;
-                }
+                if (yPos > 250) { doc.addPage(); yPos = 20; }
 
                 doc.setTextColor(...green);
                 doc.setFontSize(10);
                 doc.setFont(undefined, 'bold');
-                doc.text(normalizeText(`${goalLabels[key]} (${items.length} atividades)`), 20, yPos);
-                yPos += 7;
-            }
-        });
-    }
+                const label = goalLabels[key] || key;
+                doc.text(normalizeText(`${label} (${items.length} atividades)`), 20, yPos);
+                yPos += 6;
 
-    yPos += 5;
+                doc.setTextColor(...grey);
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'normal');
 
-    // Deliveries
-    if (monthDeliveries.length > 0) {
-        if (yPos > 250) {
-            doc.addPage();
-            yPos = 20;
-        }
-
-        doc.setTextColor(...teal);
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text(normalizeText('PRINCIPAIS ENTREGAS DO MES'), 20, yPos);
-        yPos += 6;
-
-        doc.setFont(undefined, 'normal');
-        doc.setTextColor(...grey);
-        doc.setFontSize(9);
-
-        monthDeliveries.slice(0, 10).forEach(d => {
-            if (yPos > 275) {
-                doc.addPage();
-                yPos = 20;
-            }
-
-            const statusText = getStatusText(d.status);
-            const deliveryLine = normalizeText(`• ${d.title} - ${statusText}`);
-            const lines = doc.splitTextToSize(deliveryLine, 165);
-
-            lines.forEach(line => {
-                doc.text(line, 25, yPos);
+                const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))];
+                uniqueItems.slice(0, 8).forEach(item => {
+                    if (yPos > 275) { doc.addPage(); yPos = 20; }
+                    const displayItem = typeof item === 'string' ? item : '';
+                    const lines = doc.splitTextToSize(normalizeText(`  - ${displayItem}`), 165);
+                    lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+                });
                 yPos += 4;
-            });
+            }
         });
 
-        yPos += 8;
+        // Metas customizadas com detalhamento
+        if (monthAnalysis.goalAlignments.size > 0) {
+            yPos += 3;
+            const sortedGoals = Array.from(monthAnalysis.goalAlignments.values())
+                .sort((a, b) => {
+                    const order = { 'Alto Impacto': 3, 'Médio Impacto': 2, 'Baixo Impacto': 1 };
+                    return (order[b.relevance] || 0) - (order[a.relevance] || 0);
+                });
+
+            sortedGoals.forEach(alignment => {
+                if (yPos > 255) { doc.addPage(); yPos = 20; }
+
+                const impactColor = alignment.relevance === 'Alto Impacto' ? [0, 128, 0] :
+                                    alignment.relevance === 'Médio Impacto' ? [200, 150, 0] : grey;
+
+                doc.setTextColor(...green);
+                doc.setFontSize(9);
+                doc.setFont(undefined, 'bold');
+                doc.text(normalizeText(`- ${alignment.goal}`), 25, yPos);
+
+                doc.setTextColor(...impactColor);
+                doc.setFontSize(7);
+                doc.text(`[${alignment.relevance}]`, 170, yPos);
+                yPos += 5;
+
+                doc.setTextColor(...grey);
+                doc.setFont(undefined, 'normal');
+                doc.setFontSize(8);
+                doc.text(normalizeText(`  ${alignment.contribution} | Ativo em ${alignment.weeksActive} semana(s)`), 27, yPos);
+                yPos += 4;
+
+                alignment.activities.forEach(act => {
+                    if (yPos > 275) { doc.addPage(); yPos = 20; }
+                    const actLines = doc.splitTextToSize(normalizeText(`    > ${act}`), 155);
+                    actLines.forEach(line => { doc.text(line, 30, yPos); yPos += 4; });
+                });
+                yPos += 3;
+            });
+        }
     }
 
-    // KPIs Performance
+    // ===== KPIs =====
     if (monthKpis.length > 0) {
-        if (yPos > 250) {
-            doc.addPage();
-            yPos = 20;
-        }
+        if (yPos > 250) { doc.addPage(); yPos = 20; }
 
         doc.setTextColor(...sky);
         doc.setFontSize(11);
@@ -2557,17 +2795,90 @@ async function generateMonthlySummary() {
         doc.setFontSize(9);
 
         monthKpis.forEach(k => {
-            if (yPos > 275) {
-                doc.addPage();
-                yPos = 20;
-            }
-
+            if (yPos > 275) { doc.addPage(); yPos = 20; }
             const performance = (k.current / k.target * 100).toFixed(1);
-            doc.text(normalizeText(`• ${k.name}: ${k.current}/${k.target} ${k.unit} (${performance}%)`), 25, yPos);
+            doc.text(normalizeText(`- ${k.name}: ${k.current}/${k.target} ${k.unit} (${performance}%)`), 25, yPos);
             yPos += 5;
         });
-
         yPos += 8;
+    }
+
+    // ===== AVALIAÇÃO DE DESEMPENHO =====
+    const hasEvalData = (APP_DATA.strengths && APP_DATA.strengths.length > 0) ||
+                        (APP_DATA.opportunities && APP_DATA.opportunities.length > 0) ||
+                        (APP_DATA.attentionPoints && APP_DATA.attentionPoints.length > 0) ||
+                        (APP_DATA.advanceSteps && APP_DATA.advanceSteps.length > 0);
+
+    if (hasEvalData) {
+        doc.addPage();
+        yPos = 20;
+
+        doc.setFillColor(...green);
+        doc.rect(15, yPos - 5, 180, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('AVALIACAO DE DESEMPENHO', 20, yPos);
+        yPos += 12;
+
+        if (APP_DATA.strengths && APP_DATA.strengths.length > 0) {
+            doc.setTextColor(...teal);
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'bold');
+            doc.text(normalizeText('PONTOS FORTES'), 20, yPos);
+            yPos += 6;
+            doc.setTextColor(...grey); doc.setFontSize(9); doc.setFont(undefined, 'normal');
+            APP_DATA.strengths.slice(0, 5).forEach(s => {
+                if (yPos > 275) { doc.addPage(); yPos = 20; }
+                const lines = doc.splitTextToSize(normalizeText(`- ${s.content}`), 165);
+                lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+            });
+            yPos += 5;
+        }
+
+        if (APP_DATA.opportunities && APP_DATA.opportunities.length > 0) {
+            doc.setTextColor(...sky);
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'bold');
+            doc.text(normalizeText('OPORTUNIDADES DE MELHORIA'), 20, yPos);
+            yPos += 6;
+            doc.setTextColor(...grey); doc.setFontSize(9); doc.setFont(undefined, 'normal');
+            APP_DATA.opportunities.slice(0, 5).forEach(o => {
+                if (yPos > 275) { doc.addPage(); yPos = 20; }
+                const lines = doc.splitTextToSize(normalizeText(`- ${o.content}`), 165);
+                lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+            });
+            yPos += 5;
+        }
+
+        if (APP_DATA.attentionPoints && APP_DATA.attentionPoints.length > 0) {
+            doc.setTextColor(...orange);
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'bold');
+            doc.text(normalizeText('PONTOS DE ATENCAO'), 20, yPos);
+            yPos += 6;
+            doc.setTextColor(...grey); doc.setFontSize(9); doc.setFont(undefined, 'normal');
+            APP_DATA.attentionPoints.slice(0, 5).forEach(a => {
+                if (yPos > 275) { doc.addPage(); yPos = 20; }
+                const lines = doc.splitTextToSize(normalizeText(`- ${a.content}`), 165);
+                lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+            });
+            yPos += 5;
+        }
+
+        if (APP_DATA.advanceSteps && APP_DATA.advanceSteps.length > 0) {
+            doc.setTextColor(...green);
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'bold');
+            doc.text(normalizeText('COMO AVANCAR'), 20, yPos);
+            yPos += 6;
+            doc.setTextColor(...grey); doc.setFontSize(9); doc.setFont(undefined, 'normal');
+            APP_DATA.advanceSteps.slice(0, 5).forEach(a => {
+                if (yPos > 275) { doc.addPage(); yPos = 20; }
+                const lines = doc.splitTextToSize(normalizeText(`- ${a.content}`), 165);
+                lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+            });
+        }
     }
 
     // Footer
@@ -2738,25 +3049,88 @@ async function generateConsolidatedReport(weeks, periodLabel) {
     const consolidatedAnalysis = {
         clients: new Set(),
         products: new Set(),
-        meetings: 0,
+        projects: new Set(),
         automations: 0,
         achievements: 0,
-        configurations: 0
+        configurations: 0,
+        trainings: 0,
+        hasEnglish: false,
+        documentation: 0,
+        valueDeliveries: [],
+        collaboration: 0,
+        goalAlignments: new Map()
     };
 
     weeks.forEach(week => {
         const analysis = analyzeActivitiesExecutive(week);
         analysis.clients.forEach(c => consolidatedAnalysis.clients.add(c));
         analysis.products.forEach(p => consolidatedAnalysis.products.add(p));
-        consolidatedAnalysis.meetings += analysis.indicators.reunioesRealizadas || 0;
+        analysis.projects.forEach(p => consolidatedAnalysis.projects.add(p));
         consolidatedAnalysis.automations += analysis.automations.length;
         consolidatedAnalysis.achievements += analysis.achievements.length;
         consolidatedAnalysis.configurations += analysis.configurations.length;
+        consolidatedAnalysis.trainings += analysis.trainings.length;
+        consolidatedAnalysis.documentation += analysis.indicators.documentacoesCriadas || 0;
+        consolidatedAnalysis.collaboration += analysis.collaboration.length;
+        if (analysis.trainings.some(t => t.isEnglish)) consolidatedAnalysis.hasEnglish = true;
+        if (analysis.valueDeliveries.length > 0) {
+            consolidatedAnalysis.valueDeliveries.push(...analysis.valueDeliveries);
+        }
+
+        analysis.goalAlignment.forEach(ga => {
+            if (!consolidatedAnalysis.goalAlignments.has(ga.goal)) {
+                consolidatedAnalysis.goalAlignments.set(ga.goal, {
+                    goal: ga.goal,
+                    category: ga.category || '',
+                    relevance: ga.relevance,
+                    activities: new Set(),
+                    contribution: ga.contribution,
+                    weeksActive: 0
+                });
+            }
+            const existing = consolidatedAnalysis.goalAlignments.get(ga.goal);
+            ga.activities.forEach(a => existing.activities.add(a));
+            existing.weeksActive++;
+            if (ga.relevance === 'Alto Impacto') existing.relevance = 'Alto Impacto';
+        });
     });
 
     // Resumo Executivo Consolidado
+    const summaryParts = [];
+    summaryParts.push(`Periodo de alta produtividade com ${weeks.length} semana(s) registradas`);
+    if (consolidatedAnalysis.clients.size > 0) {
+        summaryParts.push(`Atuacao estrategica em ${consolidatedAnalysis.clients.size} cliente(s): ${Array.from(consolidatedAnalysis.clients).join(', ')}`);
+    }
+    if (consolidatedAnalysis.products.size > 0) {
+        summaryParts.push(`Trabalho com ${consolidatedAnalysis.products.size} produto(s): ${Array.from(consolidatedAnalysis.products).join(', ')}`);
+    }
+    if (consolidatedAnalysis.valueDeliveries.length > 0) {
+        summaryParts.push(`${consolidatedAnalysis.valueDeliveries.length} entrega(s) de valor realizadas`);
+    }
+    if (consolidatedAnalysis.automations > 0) {
+        summaryParts.push(`${consolidatedAnalysis.automations} iniciativa(s) de automacao/IA`);
+    }
+    if (consolidatedAnalysis.hasEnglish) {
+        summaryParts.push('Desenvolvimento continuo em Ingles para atuacao internacional');
+    } else if (consolidatedAnalysis.trainings > 0) {
+        summaryParts.push(`${consolidatedAnalysis.trainings} atividade(s) de capacitacao profissional`);
+    }
+    if (consolidatedAnalysis.documentation > 0) {
+        summaryParts.push(`${consolidatedAnalysis.documentation} documentacao(oes) elaborada(s)`);
+    }
+    if (consolidatedAnalysis.achievements > 0) {
+        summaryParts.push(`${consolidatedAnalysis.achievements} reconhecimento(s) profissional(is) obtido(s)`);
+    }
+    if (consolidatedAnalysis.collaboration > 0) {
+        summaryParts.push('Colaboracao e suporte ativo entre equipes');
+    }
+
+    const summary = summaryParts.join('. ') + '.';
+    const summaryLines = doc.splitTextToSize(summary, 170);
+    const summaryHeight = Math.max(40, summaryLines.length * 4 + 15);
+
     doc.setFillColor(240, 240, 240);
-    doc.roundedRect(15, yPos - 5, 180, 40, 3, 3, 'F');
+    doc.roundedRect(15, yPos - 5, 180, summaryHeight, 3, 3, 'F');
 
     doc.setTextColor(...orange);
     doc.setFontSize(11);
@@ -2768,15 +3142,12 @@ async function generateConsolidatedReport(weeks, periodLabel) {
     doc.setFontSize(9);
     doc.setFont(undefined, 'normal');
 
-    const summary = `Periodo de alta produtividade com ${weeks.length} semana(s) registradas. Atuacao estrategica em ${consolidatedAnalysis.clients.size} cliente(s): ${Array.from(consolidatedAnalysis.clients).join(', ')}. Total de ${consolidatedAnalysis.meetings} reunioes realizadas. ${consolidatedAnalysis.automations > 0 ? `Desenvolvimento de ${consolidatedAnalysis.automations} iniciativa(s) de automacao/IA.` : ''} ${consolidatedAnalysis.achievements > 0 ? `${consolidatedAnalysis.achievements} reconhecimento(s) profissional(is) obtido(s).` : ''}`;
-
-    const summaryLines = doc.splitTextToSize(summary, 170);
     summaryLines.forEach(line => {
         doc.text(line, 20, yPos);
         yPos += 4;
     });
 
-    yPos += 15;
+    yPos += summaryHeight - summaryLines.length * 4 + 5;
 
     // Indicadores Consolidados
     doc.setTextColor(...orange);
@@ -2785,12 +3156,16 @@ async function generateConsolidatedReport(weeks, periodLabel) {
     doc.text('INDICADORES CONSOLIDADOS', 20, yPos);
     yPos += 8;
 
+    const teal = [77, 178, 153];
+    const sky = [26, 126, 229];
+
     const indicators = [
         { label: 'Semanas Registradas', value: weeks.length },
         { label: 'Clientes Impactados', value: consolidatedAnalysis.clients.size },
         { label: 'Produtos Trabalhados', value: consolidatedAnalysis.products.size },
-        { label: 'Reunioes Realizadas', value: consolidatedAnalysis.meetings },
-        { label: 'Iniciativas Estrategicas', value: consolidatedAnalysis.automations + consolidatedAnalysis.achievements }
+        { label: 'Entregas de Valor', value: consolidatedAnalysis.valueDeliveries.length },
+        { label: 'Iniciativas IA', value: consolidatedAnalysis.automations + consolidatedAnalysis.achievements },
+        { label: 'Capacitacao/Ingles', value: consolidatedAnalysis.trainings }
     ];
 
     doc.setFontSize(8);
@@ -2802,12 +3177,14 @@ async function generateConsolidatedReport(weeks, periodLabel) {
             xPos = 20;
         }
 
-        doc.setDrawColor(...grey);
-        doc.setLineWidth(0.3);
-        doc.roundedRect(xPos, yPos - 3, 55, 10, 2, 2, 'S');
+        doc.setFillColor(249, 247, 245);
+        doc.setDrawColor(...orange);
+        doc.setLineWidth(0.4);
+        doc.roundedRect(xPos, yPos - 3, 55, 10, 2, 2, 'FD');
 
         doc.setTextColor(...green);
         doc.setFont(undefined, 'bold');
+        doc.setFontSize(10);
         doc.text(`${ind.value}`, xPos + 3, yPos + 2);
 
         doc.setTextColor(...grey);
@@ -2821,7 +3198,176 @@ async function generateConsolidatedReport(weeks, periodLabel) {
 
     yPos += 20;
 
+    // ===== ENTREGAS DE VALOR =====
+    if (consolidatedAnalysis.valueDeliveries.length > 0) {
+        if (yPos > 240) { doc.addPage(); yPos = 20; }
+
+        doc.setFillColor(...teal);
+        doc.rect(15, yPos - 5, 180, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('ENTREGAS DE VALOR DO PERIODO', 20, yPos);
+        yPos += 10;
+
+        doc.setTextColor(...grey);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+
+        const uniqueDeliveries = [...new Set(consolidatedAnalysis.valueDeliveries)];
+        uniqueDeliveries.slice(0, 15).forEach(delivery => {
+            if (yPos > 275) { doc.addPage(); yPos = 20; }
+            const lines = doc.splitTextToSize(normalizeText(`- ${delivery}`), 165);
+            lines.forEach(line => {
+                doc.text(line, 25, yPos);
+                yPos += 4;
+            });
+        });
+        yPos += 8;
+    }
+
+    // ===== DESENVOLVIMENTO E CAPACITAÇÃO =====
+    if (consolidatedAnalysis.trainings > 0 || consolidatedAnalysis.hasEnglish) {
+        if (yPos > 250) { doc.addPage(); yPos = 20; }
+
+        doc.setFillColor(...sky);
+        doc.rect(15, yPos - 5, 180, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('DESENVOLVIMENTO E CAPACITACAO', 20, yPos);
+        yPos += 10;
+
+        doc.setTextColor(...grey);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+
+        if (consolidatedAnalysis.hasEnglish) {
+            doc.text(normalizeText('- Estudo de Ingles: investimento continuo para atuacao em projetos internacionais'), 25, yPos);
+            yPos += 5;
+        }
+        if (consolidatedAnalysis.trainings > 0) {
+            doc.text(normalizeText(`- ${consolidatedAnalysis.trainings} atividade(s) de capacitacao profissional no periodo`), 25, yPos);
+            yPos += 5;
+        }
+        yPos += 5;
+    }
+
+    // ===== ALINHAMENTO COM METAS ESTRATÉGICAS (VISÃO DO GESTOR) =====
+    const hasWeekGoals = weeks.some(w => w.goalsAlignment && Object.values(w.goalsAlignment).some(arr => arr && arr.length > 0));
+
+    if (hasWeekGoals || consolidatedAnalysis.goalAlignments.size > 0) {
+        if (yPos > 220) { doc.addPage(); yPos = 20; }
+
+        doc.setFillColor(...orange);
+        doc.rect(15, yPos - 5, 180, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('ALINHAMENTO COM METAS ESTRATEGICAS', 20, yPos);
+        yPos += 12;
+
+        const goalLabels = {
+            customer: 'Customer - Most LOVED & TRUSTED PARTNER',
+            aiRace: 'AI Race - Cutting-edge AI SOLUTIONS',
+            financepeople: 'Finance + People',
+            internal: 'Internal - REIMAGINE with AI',
+            commonGoal: 'Objetivo Comum - Transformacao da IA',
+            career: 'Metas de Carreira'
+        };
+
+        // Alinhamento via goalsAlignment das semanas
+        const weekGoalsConsolidated = {};
+        weeks.forEach(week => {
+            if (week.goalsAlignment) {
+                Object.keys(week.goalsAlignment).forEach(key => {
+                    if (!weekGoalsConsolidated[key]) weekGoalsConsolidated[key] = [];
+                    if (week.goalsAlignment[key]) {
+                        weekGoalsConsolidated[key].push(...week.goalsAlignment[key]);
+                    }
+                });
+            }
+        });
+
+        Object.entries(weekGoalsConsolidated).forEach(([key, items]) => {
+            if (items.length > 0) {
+                if (yPos > 250) { doc.addPage(); yPos = 20; }
+
+                doc.setTextColor(...green);
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'bold');
+                const label = goalLabels[key] || key;
+                doc.text(normalizeText(label), 20, yPos);
+                yPos += 6;
+
+                doc.setTextColor(...grey);
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'normal');
+
+                const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))];
+                uniqueItems.slice(0, 8).forEach(item => {
+                    if (yPos > 275) { doc.addPage(); yPos = 20; }
+                    const displayItem = typeof item === 'string' ? item : '';
+                    const lines = doc.splitTextToSize(normalizeText(`  - ${displayItem}`), 165);
+                    lines.forEach(line => {
+                        doc.text(line, 25, yPos);
+                        yPos += 4;
+                    });
+                });
+                yPos += 4;
+            }
+        });
+
+        // Metas customizadas com atividades alinhadas
+        if (consolidatedAnalysis.goalAlignments.size > 0) {
+            yPos += 3;
+
+            const sortedGoals = Array.from(consolidatedAnalysis.goalAlignments.values())
+                .sort((a, b) => {
+                    const order = { 'Alto Impacto': 3, 'Médio Impacto': 2, 'Baixo Impacto': 1 };
+                    return (order[b.relevance] || 0) - (order[a.relevance] || 0);
+                });
+
+            sortedGoals.forEach(alignment => {
+                if (yPos > 255) { doc.addPage(); yPos = 20; }
+
+                const impactColor = alignment.relevance === 'Alto Impacto' ? [0, 128, 0] :
+                                    alignment.relevance === 'Médio Impacto' ? [200, 150, 0] : grey;
+
+                doc.setTextColor(...green);
+                doc.setFontSize(9);
+                doc.setFont(undefined, 'bold');
+                doc.text(normalizeText(`- ${alignment.goal}`), 25, yPos);
+
+                doc.setTextColor(...impactColor);
+                doc.setFontSize(7);
+                doc.text(`[${alignment.relevance}]`, 170, yPos);
+                yPos += 5;
+
+                doc.setTextColor(...grey);
+                doc.setFont(undefined, 'normal');
+                doc.setFontSize(8);
+                doc.text(normalizeText(`  ${alignment.contribution} | Ativo em ${alignment.weeksActive} semana(s)`), 27, yPos);
+                yPos += 4;
+
+                alignment.activities.forEach(act => {
+                    if (yPos > 275) { doc.addPage(); yPos = 20; }
+                    const actLines = doc.splitTextToSize(normalizeText(`    > ${act}`), 155);
+                    actLines.forEach(line => {
+                        doc.text(line, 30, yPos);
+                        yPos += 4;
+                    });
+                });
+                yPos += 3;
+            });
+        }
+    }
+
+    yPos += 5;
+
     // Detalhamento por Semana
+    if (yPos > 230) { doc.addPage(); yPos = 20; }
+
     doc.setTextColor(...orange);
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
@@ -2829,16 +3375,18 @@ async function generateConsolidatedReport(weeks, periodLabel) {
     yPos += 10;
 
     weeks.sort((a, b) => a.week.localeCompare(b.week)).forEach((week, index) => {
-        if (yPos > 250) {
+        if (yPos > 240) {
             doc.addPage();
             yPos = 20;
         }
 
+        doc.setFillColor(249, 247, 245);
+        doc.roundedRect(18, yPos - 4, 174, 6, 1, 1, 'F');
         doc.setTextColor(...green);
         doc.setFontSize(10);
         doc.setFont(undefined, 'bold');
         doc.text(normalizeText(`Semana ${index + 1}: ${week.week}`), 20, yPos);
-        yPos += 6;
+        yPos += 8;
 
         doc.setTextColor(...grey);
         doc.setFontSize(9);
@@ -2848,7 +3396,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
             const formattedActivities = formatTextProfessionally(week.activities);
             const normalizedActivities = normalizeText(formattedActivities);
             const lines = doc.splitTextToSize(normalizedActivities, 170);
-            lines.slice(0, 5).forEach(line => { // Apenas primeiras 5 linhas por semana
+            lines.slice(0, 8).forEach(line => {
                 if (yPos > 275) {
                     doc.addPage();
                     yPos = 20;
@@ -2858,8 +3406,103 @@ async function generateConsolidatedReport(weeks, periodLabel) {
             });
         }
 
+        if (week.achievements && week.achievements.trim()) {
+            doc.setTextColor(...teal);
+            doc.setFontSize(8);
+            doc.setFont(undefined, 'bold');
+            doc.text('Conquistas:', 25, yPos);
+            yPos += 4;
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(...grey);
+            const achLines = doc.splitTextToSize(normalizeText(week.achievements), 160);
+            achLines.slice(0, 3).forEach(line => {
+                if (yPos > 275) { doc.addPage(); yPos = 20; }
+                doc.text(line, 28, yPos);
+                yPos += 4;
+            });
+        }
+
         yPos += 6;
     });
+
+    // ===== AVALIAÇÃO DE DESEMPENHO DO PERÍODO =====
+    doc.addPage();
+    yPos = 20;
+
+    doc.setFillColor(...green);
+    doc.rect(15, yPos - 5, 180, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('AVALIACAO DE DESEMPENHO DO PERIODO', 20, yPos);
+    yPos += 12;
+
+    if (APP_DATA.strengths && APP_DATA.strengths.length > 0) {
+        doc.setTextColor(...teal);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text(normalizeText('PONTOS FORTES'), 20, yPos);
+        yPos += 6;
+        doc.setTextColor(...grey);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        APP_DATA.strengths.slice(0, 5).forEach(s => {
+            if (yPos > 275) { doc.addPage(); yPos = 20; }
+            const lines = doc.splitTextToSize(normalizeText(`- ${s.content}`), 165);
+            lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+        });
+        yPos += 5;
+    }
+
+    if (APP_DATA.opportunities && APP_DATA.opportunities.length > 0) {
+        doc.setTextColor(...sky);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text(normalizeText('OPORTUNIDADES DE MELHORIA'), 20, yPos);
+        yPos += 6;
+        doc.setTextColor(...grey);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        APP_DATA.opportunities.slice(0, 5).forEach(o => {
+            if (yPos > 275) { doc.addPage(); yPos = 20; }
+            const lines = doc.splitTextToSize(normalizeText(`- ${o.content}`), 165);
+            lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+        });
+        yPos += 5;
+    }
+
+    if (APP_DATA.attentionPoints && APP_DATA.attentionPoints.length > 0) {
+        doc.setTextColor(...orange);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text(normalizeText('PONTOS DE ATENCAO'), 20, yPos);
+        yPos += 6;
+        doc.setTextColor(...grey);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        APP_DATA.attentionPoints.slice(0, 5).forEach(a => {
+            if (yPos > 275) { doc.addPage(); yPos = 20; }
+            const lines = doc.splitTextToSize(normalizeText(`- ${a.content}`), 165);
+            lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+        });
+        yPos += 5;
+    }
+
+    if (APP_DATA.advanceSteps && APP_DATA.advanceSteps.length > 0) {
+        doc.setTextColor(...green);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text(normalizeText('COMO AVANCAR'), 20, yPos);
+        yPos += 6;
+        doc.setTextColor(...grey);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        APP_DATA.advanceSteps.slice(0, 5).forEach(a => {
+            if (yPos > 275) { doc.addPage(); yPos = 20; }
+            const lines = doc.splitTextToSize(normalizeText(`- ${a.content}`), 165);
+            lines.forEach(line => { doc.text(line, 25, yPos); yPos += 4; });
+        });
+    }
 
     // Footer
     const pageCount = doc.internal.getNumberOfPages();
@@ -2868,6 +3511,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
         doc.setFontSize(8);
         doc.setTextColor(...grey);
         doc.text(`Pagina ${i} de ${pageCount}`, 105, 290, { align: 'center' });
+        doc.text('Thomson Reuters - Professional Service (PS)', 105, 285, { align: 'center' });
     }
 
     const fileName = `relatorio-consolidado-${new Date().toISOString().split('T')[0]}.pdf`;
