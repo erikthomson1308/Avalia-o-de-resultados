@@ -392,8 +392,8 @@ function analyzeActivitiesExecutive(weeklyRecord) {
 
     // NÃO são clientes: plataformas, produtos, consultorias parceiras, termos internos
     const notClients = [
-        'sap', 'pwc', 'dfe', 'df-e', 'tax one', 'onesource', 'mastersaf',
-        'tax calendar', 'synergy', 'checkpoint', 'koine', 'fiscal sheld',
+        'sap', 'pwc', 'dfe', 'df', 'df-e', 'tax one', 'onesource', 'mastersaf',
+        'tax calendar', 'tax help', 'synergy', 'checkpoint', 'koine', 'fiscal sheld',
         'deloitte', 'kpmg', 'ey', 'accenture', 'ibm', 'microsoft', 'oracle', 'salesforce',
         'thomson reuters', 'thomson', 'reuters',
         'interno', 'internal', 'reforma', 'reforma tributaria', 'reforma tributária',
@@ -409,7 +409,7 @@ function analyzeActivitiesExecutive(weeklyRecord) {
         'participei', 'realizei', 'fiz', 'atuei', 'apoiei', 'suporte'
     ];
 
-    const knownProducts = ['tax one', 'onesource', 'df-e', 'dfe', 'sap', 'mastersaf', 'tax calendar', 'synergy', 'checkpoint', 'fiscal sheld', 'koine'];
+    const knownProducts = ['tax one', 'onesource', 'df-e', 'dfe', 'sap', 'mastersaf', 'tax calendar', 'tax help', 'synergy', 'checkpoint', 'fiscal sheld', 'koine'];
     const knownProjects = ['reforma tributaria', 'reforma tributária', 'tax one for sap', 'tax calendar'];
 
     const allText = [
@@ -466,7 +466,8 @@ function analyzeActivitiesExecutive(weeklyRecord) {
     }
 
     // Remove falsos positivos da lista de clientes
-    notClients.forEach(nc => {
+    const allExclusions = [...notClients, ...knownProducts.map(p => p.toLowerCase())];
+    allExclusions.forEach(nc => {
         analysis.clients.forEach(c => {
             if (c.toLowerCase() === nc.toLowerCase()) {
                 analysis.clients.delete(c);
@@ -488,11 +489,19 @@ function analyzeActivitiesExecutive(weeklyRecord) {
 
     // FASE 2: CLASSIFICAÇÃO DE ATIVIDADES
 
-    // Automações e IA
+    // Automações e IA (com nomes específicos dos projetos de IA)
+    analysis.aiProjects = [];
+    if (/fiscal\s*sheld/i.test(allText)) analysis.aiProjects.push('Fiscal Sheld');
+    if (/tax\s*help/i.test(allText)) analysis.aiProjects.push('Tax Help');
+    if (/avaliador\s+de\s+resultado|ps\s+avaliador/i.test(allText)) analysis.aiProjects.push('PS Avaliador de Resultados');
+    if (/ia\s+de\s+gera[çc][ãa]o/i.test(allText)) analysis.aiProjects.push('IA de Geração de Documentação');
+    if (/chatbot/i.test(allText)) analysis.aiProjects.push('Chatbot');
+    if (/copilot/i.test(allText)) analysis.aiProjects.push('Copilot');
+
     if (/\b(IA|AI|automação|automaç[ãa]o|script|python|power\s*bi|chatbot|machine\s*learning|gpt|copilot|claude)/gi.test(allText)) {
         analysis.automations.push({
             detected: true,
-            type: allText.match(/relatório|relatorio/i) ? 'Relatórios Automatizados' : 'Automação de Processos'
+            type: analysis.aiProjects.length > 0 ? analysis.aiProjects.join(', ') : (allText.match(/relatório|relatorio/i) ? 'Relatórios Automatizados' : 'Automação de Processos')
         });
     }
 
@@ -620,79 +629,106 @@ function analyzeActivitiesExecutive(weeklyRecord) {
     };
 
     // FASE 4: CRUZAMENTO COM METAS (se existirem)
+    // Cada tipo de atividade é atribuído a UMA meta (a mais relevante), sem repetição
     if (APP_DATA.customGoals && APP_DATA.customGoals.length > 0) {
+        const usedActivities = new Set();
+
         APP_DATA.customGoals.forEach(goal => {
             const goalText = (goal.title + ' ' + (goal.description || '') + ' ' + goal.category).toLowerCase();
             let relevance = 0;
             let activities = [];
 
-            if (analysis.clients.size > 0 && /client|customer|most loved|trusted|partner|atendimento/i.test(goalText)) {
+            // CUSTOMER: lista de clientes (apenas para metas de customer/partner)
+            if (!usedActivities.has('clients') && analysis.clients.size > 0 && /client|customer|most loved|trusted|partner|atendimento/i.test(goalText)) {
                 relevance = 3;
-                activities.push(`Atuação em ${analysis.clients.size} cliente(s): ${Array.from(analysis.clients).join(', ')}`);
+                activities.push(`Atuação direta em ${analysis.clients.size} cliente(s): ${Array.from(analysis.clients).join(', ')}`);
+                if (analysis.configurations.length > 0) {
+                    activities.push('Configurações técnicas e setup de ambientes');
+                }
+                usedActivities.add('clients');
+                usedActivities.add('configurations');
             }
 
-            if (analysis.automations.length > 0 && /IA|AI|cutting.edge|race|automação|automation|intelig[êe]ncia|digital/i.test(goalText)) {
-                relevance = 3;
-                activities.push('Desenvolvimento de soluções com IA/Automação');
+            // AI/IA: nomes específicos dos projetos de IA
+            if (!usedActivities.has('ai') && analysis.automations.length > 0 && /IA|AI|cutting.edge|race|automação|automation|intelig[êe]ncia|digital/i.test(goalText)) {
+                relevance = Math.max(relevance, 3);
+                if (analysis.aiProjects.length > 0) {
+                    activities.push(`Projetos de IA: ${analysis.aiProjects.join(', ')}`);
+                } else {
+                    activities.push('Desenvolvimento de soluções com IA/Automação');
+                }
+                const internalTests = analysis.internalActivities.filter(a => a.type === 'Teste/POC Interno');
+                internalTests.forEach(t => activities.push(`Teste/POC: ${t.description}`));
+                usedActivities.add('ai');
+                usedActivities.add('tests');
             }
 
-            if (analysis.trainings.length > 0 && /ingl[êe]s|english|idioma|l[íi]ngua|internacional|capacita|treinamento|curso|certifica/i.test(goalText)) {
-                relevance = Math.max(relevance, 2);
+            // INGLÊS/CARREIRA: apenas texto simples
+            if (!usedActivities.has('english') && analysis.trainings.length > 0) {
                 const englishTraining = analysis.trainings.find(t => t.isEnglish);
-                activities.push(englishTraining ? 'Estudo de Inglês para projetos internacionais' : 'Treinamento e capacitação profissional');
+                if (englishTraining && /ingl[êe]s|english|idioma|l[íi]ngua|proficiency/i.test(goalText)) {
+                    relevance = Math.max(relevance, 2);
+                    activities.push('Evolução e estudo de Inglês');
+                    usedActivities.add('english');
+                } else if (!englishTraining && /capacita|treinamento|curso|certifica|desenvolvimento/i.test(goalText)) {
+                    relevance = Math.max(relevance, 2);
+                    activities.push('Treinamento e capacitação profissional');
+                    usedActivities.add('training');
+                }
             }
 
-            if (analysis.documentation.length > 0 && /document|padroniza|processo|internal|reimagine|efici[êe]ncia/i.test(goalText)) {
+            // DOCUMENTAÇÃO: metas internas/reimagine
+            if (!usedActivities.has('docs') && analysis.documentation.length > 0 && /document|padroniza|processo|internal|reimagine|efici[êe]ncia/i.test(goalText)) {
                 relevance = Math.max(relevance, 2);
                 activities.push(`Documentação e padronização (${analysis.indicators.documentacoesCriadas} doc(s))`);
+                usedActivities.add('docs');
             }
 
-            if (analysis.achievements.length > 0 && /carreira|career|desenvolvimento|development|crescimento/i.test(goalText)) {
-                relevance = Math.max(relevance, 2);
-                activities.push('Reconhecimento profissional obtido');
-            }
-
-            if (analysis.valueDeliveries.length > 0 && /entrega|delivery|resultado|performance|produtividade/i.test(goalText)) {
+            // ENTREGAS DE VALOR: metas de performance/resultado
+            if (!usedActivities.has('deliveries') && analysis.valueDeliveries.length > 0 && /entrega|delivery|resultado|performance|produtividade/i.test(goalText)) {
                 relevance = Math.max(relevance, 2);
                 activities.push(`${analysis.valueDeliveries.length} entrega(s) de valor realizadas`);
+                usedActivities.add('deliveries');
             }
 
-            if (analysis.configurations.length > 0 && /config|setup|implanta|implementa|tecni/i.test(goalText)) {
+            // RECONHECIMENTO: metas de carreira
+            if (!usedActivities.has('achievements') && analysis.achievements.length > 0 && /carreira|career|desenvolvimento|development|crescimento/i.test(goalText)) {
                 relevance = Math.max(relevance, 2);
-                activities.push('Configurações técnicas e setup de sistemas');
+                activities.push('Reconhecimento profissional obtido');
+                usedActivities.add('achievements');
             }
 
-            if (analysis.collaboration.length > 0 && /colabora|equipe|team|people|finance.*people|soft.*skill/i.test(goalText)) {
+            // COLABORAÇÃO: metas de equipe/people
+            if (!usedActivities.has('collab') && analysis.collaboration.length > 0 && /colabora|equipe|team|people|finance.*people|soft.*skill/i.test(goalText)) {
                 relevance = Math.max(relevance, 1);
                 activities.push('Colaboração e suporte entre equipes');
+                usedActivities.add('collab');
             }
 
-            // Atividades internas alinhadas com metas
+            // ATIVIDADES INTERNAS (apenas as ainda não usadas)
             if (analysis.internalActivities.length > 0) {
                 const internalTrainings = analysis.internalActivities.filter(a => a.type === 'Treinamento Interno');
-                const internalTests = analysis.internalActivities.filter(a => a.type === 'Teste/POC Interno');
                 const internalCheckins = analysis.internalActivities.filter(a => a.type === 'Check-in/Feedback');
                 const internalEvents = analysis.internalActivities.filter(a => a.type === 'Evento Interno');
 
-                if (internalTrainings.length > 0 && /capacita|treinamento|desenvolvimento|internal|reimagine|efici[êe]ncia/i.test(goalText)) {
+                if (!usedActivities.has('int-training') && internalTrainings.length > 0 && /capacita|treinamento|desenvolvimento|internal|reimagine/i.test(goalText)) {
                     relevance = Math.max(relevance, 2);
                     internalTrainings.forEach(t => activities.push(`Treinamento: ${t.description}`));
+                    usedActivities.add('int-training');
                 }
-                if (internalTests.length > 0 && /IA|AI|cutting.edge|race|automação|automation|intelig[êe]ncia|digital|inova/i.test(goalText)) {
-                    relevance = Math.max(relevance, 2);
-                    internalTests.forEach(t => activities.push(`Teste/POC: ${t.description}`));
-                }
-                if (internalCheckins.length > 0 && /carreira|career|desenvolvimento|development|crescimento|people|finance/i.test(goalText)) {
+                if (!usedActivities.has('int-checkins') && internalCheckins.length > 0 && /carreira|career|desenvolvimento|crescimento|people|feedback/i.test(goalText)) {
                     relevance = Math.max(relevance, 1);
                     internalCheckins.forEach(t => activities.push(`${t.description}`));
+                    usedActivities.add('int-checkins');
                 }
-                if (internalEvents.length > 0 && /colabora|equipe|team|people|internal|common/i.test(goalText)) {
+                if (!usedActivities.has('int-events') && internalEvents.length > 0 && /colabora|equipe|team|people|internal|common/i.test(goalText)) {
                     relevance = Math.max(relevance, 1);
                     internalEvents.forEach(t => activities.push(`Evento: ${t.description}`));
+                    usedActivities.add('int-events');
                 }
             }
 
-            if (relevance > 0) {
+            if (relevance > 0 && activities.length > 0) {
                 analysis.goalAlignment.push({
                     goal: goal.title,
                     category: goal.category || '',
@@ -717,7 +753,11 @@ function analyzeActivitiesExecutive(weeklyRecord) {
     }
 
     if (analysis.automations.length > 0) {
-        summaryParts.push(`${analysis.automations.length} iniciativa(s) de automação/IA`);
+        if (analysis.aiProjects.length > 0) {
+            summaryParts.push(`Projetos de IA: ${analysis.aiProjects.join(', ')}`);
+        } else {
+            summaryParts.push(`${analysis.automations.length} iniciativa(s) de automação/IA`);
+        }
     }
 
     if (analysis.valueDeliveries.length > 0) {
@@ -869,7 +909,8 @@ function addExecutiveSummaryToPDF(doc, analysis, yPos, normalizeText) {
             doc.text(`   Impacto: ${alignment.relevance}`, 27, yPos);
             yPos += 4;
 
-            alignment.activities.forEach(act => {
+            const filteredActs = alignment.activities.filter(act => !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(act));
+            filteredActs.forEach(act => {
                 const actLines = doc.splitTextToSize(`   > ${act}`, 165);
                 actLines.forEach(line => {
                     if (yPos > 275) {
@@ -1799,7 +1840,16 @@ function analyzeGoalsAlignment(activitiesText) {
     }
 
     // AI Race - WIN with cutting-edge AI SOLUTIONS
-    if (text.includes('ia') || text.includes('ai') || text.includes('inteligência artificial') ||
+    const aiProjectNames = [];
+    if (/fiscal\s*sheld/i.test(text)) aiProjectNames.push('Fiscal Sheld');
+    if (/tax\s*help/i.test(text)) aiProjectNames.push('Tax Help');
+    if (/avaliador\s+de\s+resultado|ps\s+avaliador/i.test(text)) aiProjectNames.push('PS Avaliador de Resultados');
+    if (/ia\s+de\s+gera[çc][ãa]o/i.test(text)) aiProjectNames.push('IA de Geração de Documentação');
+    if (/chatbot|copilot|gpt|claude/i.test(text)) aiProjectNames.push('Assistente IA');
+
+    if (aiProjectNames.length > 0) {
+        alignment.aiRace.push(`Desenvolvimento/testes de IA: ${aiProjectNames.join(', ')}`);
+    } else if (text.includes('ia') || text.includes('ai') || text.includes('inteligência artificial') ||
         text.includes('automação') || text.includes('machine learning') || text.includes('script')) {
         alignment.aiRace.push('Desenvolvimento de soluções com IA/Automação');
     }
@@ -1836,7 +1886,7 @@ function analyzeGoalsAlignment(activitiesText) {
 
     // Career Goals
     if (text.includes('inglês') || text.includes('english') || text.includes('internacional')) {
-        alignment.career.push('Melhoria de inglês para projetos internacionais');
+        alignment.career.push('Evolução e estudo de Inglês');
     }
     if (text.includes('tax calendar') || text.includes('calendário fiscal') || text.includes('latam')) {
         alignment.career.push('Trabalho em Tax Calendar LATAM');
@@ -1845,13 +1895,7 @@ function analyzeGoalsAlignment(activitiesText) {
         alignment.career.push('Especialização em Tax One para SAP');
     }
 
-    // Count meetings
-    const meetingMatches = text.match(/reunião|reuniões|meeting|daily|weekly|workshop|apresentação/gi);
-    if (meetingMatches) {
-        alignment.customer.push(`Participação em ${meetingMatches.length} reuniões/eventos`);
-    }
-
-    // Count documentation
+    // Count documentation (sem reuniões - removido a pedido)
     const docMatches = text.match(/documentação|documento|doc|confluence|wiki|manual|guia/gi);
     if (docMatches) {
         alignment.internal.push(`Criação de ${docMatches.length} documentações`);
@@ -2638,6 +2682,7 @@ async function generateMonthlySummary() {
     const monthAnalysis = {
         clients: new Set(),
         products: new Set(),
+        aiProjects: new Set(),
         automations: 0,
         achievements: 0,
         trainings: 0,
@@ -2653,6 +2698,7 @@ async function generateMonthlySummary() {
         const analysis = analyzeActivitiesExecutive(week);
         analysis.clients.forEach(c => monthAnalysis.clients.add(c));
         analysis.products.forEach(p => monthAnalysis.products.add(p));
+        if (analysis.aiProjects) analysis.aiProjects.forEach(p => monthAnalysis.aiProjects.add(p));
         monthAnalysis.automations += analysis.automations.length;
         monthAnalysis.achievements += analysis.achievements.length;
         monthAnalysis.trainings += analysis.trainings.length;
@@ -2693,7 +2739,11 @@ async function generateMonthlySummary() {
         execParts.push(`${monthAnalysis.valueDeliveries.length} entrega(s) de valor realizadas`);
     }
     if (monthAnalysis.automations > 0) {
-        execParts.push(`${monthAnalysis.automations} iniciativa(s) de automacao/IA`);
+        if (monthAnalysis.aiProjects.size > 0) {
+            execParts.push(`Projetos de IA: ${Array.from(monthAnalysis.aiProjects).join(', ')}`);
+        } else {
+            execParts.push(`${monthAnalysis.automations} iniciativa(s) de automacao/IA`);
+        }
     }
     if (monthAnalysis.hasEnglish) {
         execParts.push('Desenvolvimento continuo em Ingles para atuacao internacional');
@@ -2976,7 +3026,8 @@ async function generateMonthlySummary() {
                 doc.setFontSize(8);
                 doc.setFont(undefined, 'normal');
 
-                const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))];
+                const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))]
+                    .filter(i => !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(i));
                 uniqueItems.slice(0, 8).forEach(item => {
                     if (yPos > 275) { doc.addPage(); yPos = 20; }
                     const displayItem = typeof item === 'string' ? item : '';
@@ -3018,7 +3069,16 @@ async function generateMonthlySummary() {
                 doc.text(normalizeText(`  ${alignment.contribution} | Ativo em ${alignment.weeksActive} semana(s)`), 27, yPos);
                 yPos += 4;
 
+                const dedupedActs = [];
+                const actPrefixes = new Set();
                 alignment.activities.forEach(act => {
+                    const prefix = act.replace(/\d+/g, '#').substring(0, 30);
+                    if (!actPrefixes.has(prefix) && !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(act)) {
+                        actPrefixes.add(prefix);
+                        dedupedActs.push(act);
+                    }
+                });
+                dedupedActs.forEach(act => {
                     if (yPos > 275) { doc.addPage(); yPos = 20; }
                     const actLines = doc.splitTextToSize(normalizeText(`    > ${act}`), 155);
                     actLines.forEach(line => { doc.text(line, 30, yPos); yPos += 4; });
@@ -3298,6 +3358,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
         clients: new Set(),
         products: new Set(),
         projects: new Set(),
+        aiProjects: new Set(),
         automations: 0,
         achievements: 0,
         configurations: 0,
@@ -3315,6 +3376,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
         analysis.clients.forEach(c => consolidatedAnalysis.clients.add(c));
         analysis.products.forEach(p => consolidatedAnalysis.products.add(p));
         analysis.projects.forEach(p => consolidatedAnalysis.projects.add(p));
+        if (analysis.aiProjects) analysis.aiProjects.forEach(p => consolidatedAnalysis.aiProjects.add(p));
         consolidatedAnalysis.automations += analysis.automations.length;
         consolidatedAnalysis.achievements += analysis.achievements.length;
         consolidatedAnalysis.configurations += analysis.configurations.length;
@@ -3360,7 +3422,11 @@ async function generateConsolidatedReport(weeks, periodLabel) {
         summaryParts.push(`${consolidatedAnalysis.valueDeliveries.length} entrega(s) de valor realizadas`);
     }
     if (consolidatedAnalysis.automations > 0) {
-        summaryParts.push(`${consolidatedAnalysis.automations} iniciativa(s) de automacao/IA`);
+        if (consolidatedAnalysis.aiProjects.size > 0) {
+            summaryParts.push(`Projetos de IA: ${Array.from(consolidatedAnalysis.aiProjects).join(', ')}`);
+        } else {
+            summaryParts.push(`${consolidatedAnalysis.automations} iniciativa(s) de automacao/IA`);
+        }
     }
     if (consolidatedAnalysis.hasEnglish) {
         summaryParts.push('Desenvolvimento continuo em Ingles para atuacao internacional');
@@ -3640,7 +3706,8 @@ async function generateConsolidatedReport(weeks, periodLabel) {
                 doc.setFontSize(8);
                 doc.setFont(undefined, 'normal');
 
-                const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))];
+                const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))]
+                    .filter(i => !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(i));
                 uniqueItems.slice(0, 8).forEach(item => {
                     if (yPos > 275) { doc.addPage(); yPos = 20; }
                     const displayItem = typeof item === 'string' ? item : '';
@@ -3686,7 +3753,16 @@ async function generateConsolidatedReport(weeks, periodLabel) {
                 doc.text(normalizeText(`  ${alignment.contribution} | Ativo em ${alignment.weeksActive} semana(s)`), 27, yPos);
                 yPos += 4;
 
+                const dedupedActs = [];
+                const actPrefixes = new Set();
                 alignment.activities.forEach(act => {
+                    const prefix = act.replace(/\d+/g, '#').substring(0, 30);
+                    if (!actPrefixes.has(prefix) && !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(act)) {
+                        actPrefixes.add(prefix);
+                        dedupedActs.push(act);
+                    }
+                });
+                dedupedActs.forEach(act => {
                     if (yPos > 275) { doc.addPage(); yPos = 20; }
                     const actLines = doc.splitTextToSize(normalizeText(`    > ${act}`), 155);
                     actLines.forEach(line => {
