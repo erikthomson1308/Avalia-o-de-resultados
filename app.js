@@ -406,10 +406,12 @@ function analyzeActivitiesExecutive(weeklyRecord) {
         'brasil', 'brazil', 'latam', 'global',
         'planning', 'backlog', 'standup', 'retro', 'retrospectiva',
         'treinamento', 'capacitacao', 'evento', 'workshop',
-        'participei', 'realizei', 'fiz', 'atuei', 'apoiei', 'suporte'
+        'participei', 'realizei', 'fiz', 'atuei', 'apoiei', 'suporte',
+        'semana', 'voluntario', 'voluntário'
     ];
 
-    const knownProducts = ['tax one', 'onesource', 'df-e', 'dfe', 'sap', 'mastersaf', 'tax calendar', 'tax help', 'synergy', 'checkpoint', 'fiscal sheld', 'koine'];
+    const knownProducts = ['tax one', 'tax one for sap', 'onesource', 'df-e', 'sap', 'mastersaf', 'tax calendar', 'synergy', 'checkpoint'];
+    const aiInitiatives = ['fiscal sheld', 'tax help', 'ps avaliador de resultados', 'ia de geracao de documentacao'];
     const knownProjects = ['reforma tributaria', 'reforma tributária', 'tax one for sap', 'tax calendar'];
 
     const allText = [
@@ -466,7 +468,7 @@ function analyzeActivitiesExecutive(weeklyRecord) {
     }
 
     // Remove falsos positivos da lista de clientes
-    const allExclusions = [...notClients, ...knownProducts.map(p => p.toLowerCase())];
+    const allExclusions = [...notClients, ...knownProducts.map(p => p.toLowerCase()), ...aiInitiatives.map(p => p.toLowerCase())];
     allExclusions.forEach(nc => {
         analysis.clients.forEach(c => {
             if (c.toLowerCase() === nc.toLowerCase()) {
@@ -475,11 +477,54 @@ function analyzeActivitiesExecutive(weeklyRecord) {
         });
     });
 
-    knownProducts.forEach(product => {
-        if (new RegExp(`\\b${product.replace(/-/g, '-?')}\\b`, 'i').test(allText)) {
-            analysis.products.add(product.toUpperCase().replace(/-/g, '-'));
+    // Deduplicação de clientes: case-insensitive + merge de variantes (Sanofi + Medley + Sanofi/Medley = Sanofi/Medley)
+    const clientMap = new Map();
+    analysis.clients.forEach(c => {
+        const lower = c.toLowerCase().trim();
+        if (!clientMap.has(lower)) {
+            clientMap.set(lower, c);
+        } else {
+            const existing = clientMap.get(lower);
+            const upperCount = s => (s.match(/[A-ZÀ-Ú]/g) || []).length;
+            if (upperCount(c) > upperCount(existing) || c.length > existing.length) {
+                clientMap.set(lower, c);
+            }
         }
     });
+    // Remover partes de nomes compostos: se "sanofi/medley" existe, remove "sanofi" e "medley" avulsos
+    const clientKeys = Array.from(clientMap.keys());
+    clientKeys.forEach(key => {
+        if (key.includes('/')) {
+            key.split('/').forEach(part => {
+                const p = part.trim().toLowerCase();
+                if (p !== key && clientMap.has(p)) clientMap.delete(p);
+            });
+        }
+        // "gac motors" existe → remove "gac" avulso
+        clientKeys.forEach(otherKey => {
+            if (otherKey !== key && otherKey.length < key.length && key.startsWith(otherKey + ' ')) {
+                clientMap.delete(otherKey);
+            }
+        });
+        // "sanofi medley" e "sanofi/medley" → keep only "sanofi/medley" (with slash)
+        const withSlash = key.replace(/\s+/g, '/');
+        const withSpace = key.replace(/\//g, ' ');
+        if (withSlash !== key && clientMap.has(withSlash)) clientMap.delete(key);
+        if (withSpace !== key && clientMap.has(withSpace) && key.includes('/')) clientMap.delete(withSpace);
+    });
+    analysis.clients = new Set(clientMap.values());
+
+    knownProducts.forEach(product => {
+        const pattern = product.replace(/[-]/g, '[\\-\\s]?').replace(/\s+/g, '\\s+');
+        if (new RegExp(pattern, 'i').test(allText)) {
+            analysis.products.add(product.toUpperCase());
+        }
+    });
+    // Deduplica: "TAX ONE FOR SAP" cobre "TAX ONE" e "SAP" avulsos
+    if (analysis.products.has('TAX ONE FOR SAP')) {
+        analysis.products.delete('TAX ONE');
+        analysis.products.delete('SAP');
+    }
 
     knownProjects.forEach(project => {
         if (new RegExp(`\\b${project}\\b`, 'i').test(allText)) {
@@ -588,8 +633,11 @@ function analyzeActivitiesExecutive(weeklyRecord) {
         }
 
         // Passo 2: Detecção por keywords em qualquer posição da linha
+        // MAS: se a linha começa com nome de cliente (padrão "Cliente — descrição"), NÃO é interno
         const lineLower = trimmed.toLowerCase();
         const cleanLine = trimmed.replace(/^[•\-\*]\s*/, '');
+        const startsWithClient = /^[•\-\*]?\s*[A-ZÀ-Ú][a-zA-ZÀ-ú0-9\s/&\.]{1,35}?\s*(?:[—–]+|\s\-)\s+/.test(trimmed);
+        if (startsWithClient) return;
 
         if (/\b(treinamento\s+interno|capacita[çc][ãa]o\s+interna|workshop\s+interno|onboarding)\b/i.test(lineLower)) {
             if (!internalDescriptions.has(lineLower)) {
@@ -767,7 +815,7 @@ function analyzeActivitiesExecutive(weeklyRecord) {
     if (analysis.trainings.length > 0) {
         const englishTraining = analysis.trainings.find(t => t.isEnglish);
         if (englishTraining) {
-            summaryParts.push('Desenvolvimento em Inglês para atuação internacional');
+            summaryParts.push('Desenvolvimento contínuo em Inglês');
         } else {
             summaryParts.push('Investimento em capacitação e desenvolvimento profissional');
         }
@@ -2746,7 +2794,7 @@ async function generateMonthlySummary() {
         }
     }
     if (monthAnalysis.hasEnglish) {
-        execParts.push('Desenvolvimento continuo em Ingles para atuacao internacional');
+        execParts.push('Desenvolvimento continuo em Ingles');
     } else if (monthAnalysis.trainings > 0) {
         execParts.push(`${monthAnalysis.trainings} atividade(s) de capacitacao profissional`);
     }
@@ -2837,40 +2885,35 @@ async function generateMonthlySummary() {
 
     // ===== CLIENTES IMPACTADOS (VISÃO GESTOR) =====
     if (monthAnalysis.clients.size > 0) {
-        if (yPos > 230) { doc.addPage(); yPos = 20; }
+        if (yPos > 240) { doc.addPage(); yPos = 20; }
 
         const clientOrange = [214, 100, 0];
         doc.setFillColor(...clientOrange);
         doc.rect(15, yPos - 5, 180, 8, 'F');
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(11);
+        doc.setFontSize(10);
         doc.setFont(undefined, 'bold');
-        doc.text(normalizeText(`CLIENTES IMPACTADOS NO MES (${monthAnalysis.clients.size})`), 20, yPos);
-        yPos += 10;
+        doc.text(normalizeText(`CLIENTES IMPACTADOS (${monthAnalysis.clients.size})`), 20, yPos);
+        yPos += 8;
 
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
+        // Layout compacto: tags inline que fluem horizontalmente
+        doc.setFontSize(7.5);
         const clientList = Array.from(monthAnalysis.clients).sort();
-        const clientsPerRow = 3;
-        for (let i = 0; i < clientList.length; i += clientsPerRow) {
+        let cx = 20;
+        clientList.forEach(client => {
+            const tw = doc.getTextWidth(normalizeText(client)) + 6;
+            if (cx + tw > 192) { cx = 20; yPos += 7; }
             if (yPos > 275) { doc.addPage(); yPos = 20; }
-            const rowClients = clientList.slice(i, i + clientsPerRow);
-            let cx = 20;
-            rowClients.forEach(client => {
-                doc.setFillColor(249, 247, 245);
-                doc.setDrawColor(...clientOrange);
-                doc.setLineWidth(0.3);
-                const textWidth = Math.min(doc.getTextWidth(normalizeText(client)) + 8, 55);
-                doc.roundedRect(cx, yPos - 3, textWidth, 8, 2, 2, 'FD');
-                doc.setTextColor(...green);
-                doc.setFont(undefined, 'bold');
-                doc.setFontSize(8);
-                doc.text(normalizeText(client), cx + 4, yPos + 2);
-                cx += textWidth + 5;
-            });
-            yPos += 10;
-        }
-        yPos += 5;
+            doc.setFillColor(249, 247, 245);
+            doc.setDrawColor(...clientOrange);
+            doc.setLineWidth(0.2);
+            doc.roundedRect(cx, yPos - 3, tw, 6, 1.5, 1.5, 'FD');
+            doc.setTextColor(...green);
+            doc.setFont(undefined, 'bold');
+            doc.text(normalizeText(client), cx + 3, yPos + 1);
+            cx += tw + 3;
+        });
+        yPos += 8;
     }
 
     // ===== ENTREGAS DE VALOR =====
@@ -2924,7 +2967,7 @@ async function generateMonthlySummary() {
         doc.setFont(undefined, 'normal');
 
         if (monthAnalysis.hasEnglish) {
-            doc.text(normalizeText('- Estudo de Ingles: investimento continuo para atuacao em projetos internacionais'), 25, yPos);
+            doc.text(normalizeText('- Desenvolvimento continuo em Ingles'), 25, yPos);
             yPos += 5;
         }
         if (monthAnalysis.trainings > 0) {
@@ -3011,24 +3054,32 @@ async function generateMonthlySummary() {
             }
         });
 
+        // Deduplicação cruzada: cada atividade aparece em UMA meta só
+        const usedItemsAcrossGoals = new Set();
         Object.entries(consolidatedGoals).forEach(([key, items]) => {
-            if (items.length > 0) {
+            const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))]
+                .filter(i => !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(i))
+                .filter(i => {
+                    const norm = i.replace(/\d+/g, '#').substring(0, 40).toLowerCase();
+                    if (usedItemsAcrossGoals.has(norm)) return false;
+                    usedItemsAcrossGoals.add(norm);
+                    return true;
+                });
+            if (uniqueItems.length > 0) {
                 if (yPos > 250) { doc.addPage(); yPos = 20; }
 
                 doc.setTextColor(...green);
                 doc.setFontSize(10);
                 doc.setFont(undefined, 'bold');
                 const label = goalLabels[key] || key;
-                doc.text(normalizeText(`${label} (${items.length} atividades)`), 20, yPos);
+                doc.text(normalizeText(`${label}`), 20, yPos);
                 yPos += 6;
 
                 doc.setTextColor(...grey);
                 doc.setFontSize(8);
                 doc.setFont(undefined, 'normal');
 
-                const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))]
-                    .filter(i => !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(i));
-                uniqueItems.slice(0, 8).forEach(item => {
+                uniqueItems.slice(0, 5).forEach(item => {
                     if (yPos > 275) { doc.addPage(); yPos = 20; }
                     const displayItem = typeof item === 'string' ? item : '';
                     const lines = doc.splitTextToSize(normalizeText(`  - ${displayItem}`), 165);
@@ -3038,7 +3089,7 @@ async function generateMonthlySummary() {
             }
         });
 
-        // Metas customizadas com detalhamento
+        // Metas customizadas com detalhamento — deduplicação cruzada entre metas
         if (monthAnalysis.goalAlignments.size > 0) {
             yPos += 3;
             const sortedGoals = Array.from(monthAnalysis.goalAlignments.values())
@@ -3047,11 +3098,24 @@ async function generateMonthlySummary() {
                     return (order[b.relevance] || 0) - (order[a.relevance] || 0);
                 });
 
+            const usedCustomActs = new Set();
             sortedGoals.forEach(alignment => {
                 if (yPos > 255) { doc.addPage(); yPos = 20; }
 
                 const impactColor = alignment.relevance === 'Alto Impacto' ? [0, 128, 0] :
                                     alignment.relevance === 'Médio Impacto' ? [200, 150, 0] : grey;
+
+                // Filtra atividades: sem repetição entre metas, sem reuniões
+                const dedupedActs = [];
+                alignment.activities.forEach(act => {
+                    const norm = act.replace(/\d+/g, '#').substring(0, 40).toLowerCase();
+                    if (!usedCustomActs.has(norm) && !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(act)) {
+                        usedCustomActs.add(norm);
+                        dedupedActs.push(act);
+                    }
+                });
+
+                if (dedupedActs.length === 0) return;
 
                 doc.setTextColor(...green);
                 doc.setFontSize(9);
@@ -3069,16 +3133,7 @@ async function generateMonthlySummary() {
                 doc.text(normalizeText(`  ${alignment.contribution} | Ativo em ${alignment.weeksActive} semana(s)`), 27, yPos);
                 yPos += 4;
 
-                const dedupedActs = [];
-                const actPrefixes = new Set();
-                alignment.activities.forEach(act => {
-                    const prefix = act.replace(/\d+/g, '#').substring(0, 30);
-                    if (!actPrefixes.has(prefix) && !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(act)) {
-                        actPrefixes.add(prefix);
-                        dedupedActs.push(act);
-                    }
-                });
-                dedupedActs.forEach(act => {
+                dedupedActs.slice(0, 4).forEach(act => {
                     if (yPos > 275) { doc.addPage(); yPos = 20; }
                     const actLines = doc.splitTextToSize(normalizeText(`    > ${act}`), 155);
                     actLines.forEach(line => { doc.text(line, 30, yPos); yPos += 4; });
@@ -3429,7 +3484,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
         }
     }
     if (consolidatedAnalysis.hasEnglish) {
-        summaryParts.push('Desenvolvimento continuo em Ingles para atuacao internacional');
+        summaryParts.push('Desenvolvimento continuo em Ingles');
     } else if (consolidatedAnalysis.trainings > 0) {
         summaryParts.push(`${consolidatedAnalysis.trainings} atividade(s) de capacitacao profissional`);
     }
@@ -3522,40 +3577,35 @@ async function generateConsolidatedReport(weeks, periodLabel) {
 
     // ===== CLIENTES IMPACTADOS (VISÃO GESTOR) =====
     if (consolidatedAnalysis.clients.size > 0) {
-        if (yPos > 230) { doc.addPage(); yPos = 20; }
+        if (yPos > 240) { doc.addPage(); yPos = 20; }
 
         const clientOrange = [214, 100, 0];
         doc.setFillColor(...clientOrange);
         doc.rect(15, yPos - 5, 180, 8, 'F');
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(11);
+        doc.setFontSize(10);
         doc.setFont(undefined, 'bold');
-        doc.text(normalizeText(`CLIENTES IMPACTADOS NO PERIODO (${consolidatedAnalysis.clients.size})`), 20, yPos);
-        yPos += 10;
+        doc.text(normalizeText(`CLIENTES IMPACTADOS (${consolidatedAnalysis.clients.size})`), 20, yPos);
+        yPos += 8;
 
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
+        // Layout compacto: tags inline
+        doc.setFontSize(7.5);
         const clientList = Array.from(consolidatedAnalysis.clients).sort();
-        const clientsPerRow = 3;
-        for (let i = 0; i < clientList.length; i += clientsPerRow) {
+        let cx = 20;
+        clientList.forEach(client => {
+            const tw = doc.getTextWidth(normalizeText(client)) + 6;
+            if (cx + tw > 192) { cx = 20; yPos += 7; }
             if (yPos > 275) { doc.addPage(); yPos = 20; }
-            const rowClients = clientList.slice(i, i + clientsPerRow);
-            let cx = 20;
-            rowClients.forEach(client => {
-                doc.setFillColor(249, 247, 245);
-                doc.setDrawColor(...clientOrange);
-                doc.setLineWidth(0.3);
-                const textWidth = Math.min(doc.getTextWidth(normalizeText(client)) + 8, 55);
-                doc.roundedRect(cx, yPos - 3, textWidth, 8, 2, 2, 'FD');
-                doc.setTextColor(...green);
-                doc.setFont(undefined, 'bold');
-                doc.setFontSize(8);
-                doc.text(normalizeText(client), cx + 4, yPos + 2);
-                cx += textWidth + 5;
-            });
-            yPos += 10;
-        }
-        yPos += 5;
+            doc.setFillColor(249, 247, 245);
+            doc.setDrawColor(...clientOrange);
+            doc.setLineWidth(0.2);
+            doc.roundedRect(cx, yPos - 3, tw, 6, 1.5, 1.5, 'FD');
+            doc.setTextColor(...green);
+            doc.setFont(undefined, 'bold');
+            doc.text(normalizeText(client), cx + 3, yPos + 1);
+            cx += tw + 3;
+        });
+        yPos += 8;
     }
 
     // ===== ENTREGAS DE VALOR =====
@@ -3603,7 +3653,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
         doc.setFont(undefined, 'normal');
 
         if (consolidatedAnalysis.hasEnglish) {
-            doc.text(normalizeText('- Estudo de Ingles: investimento continuo para atuacao em projetos internacionais'), 25, yPos);
+            doc.text(normalizeText('- Desenvolvimento continuo em Ingles'), 25, yPos);
             yPos += 5;
         }
         if (consolidatedAnalysis.trainings > 0) {
@@ -3691,8 +3741,17 @@ async function generateConsolidatedReport(weeks, periodLabel) {
             }
         });
 
+        const usedConsolidatedItems = new Set();
         Object.entries(weekGoalsConsolidated).forEach(([key, items]) => {
-            if (items.length > 0) {
+            const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))]
+                .filter(i => !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(i))
+                .filter(i => {
+                    const norm = i.replace(/\d+/g, '#').substring(0, 40).toLowerCase();
+                    if (usedConsolidatedItems.has(norm)) return false;
+                    usedConsolidatedItems.add(norm);
+                    return true;
+                });
+            if (uniqueItems.length > 0) {
                 if (yPos > 250) { doc.addPage(); yPos = 20; }
 
                 doc.setTextColor(...green);
@@ -3706,9 +3765,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
                 doc.setFontSize(8);
                 doc.setFont(undefined, 'normal');
 
-                const uniqueItems = [...new Set(items.map(i => typeof i === 'string' ? i : JSON.stringify(i)))]
-                    .filter(i => !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(i));
-                uniqueItems.slice(0, 8).forEach(item => {
+                uniqueItems.slice(0, 5).forEach(item => {
                     if (yPos > 275) { doc.addPage(); yPos = 20; }
                     const displayItem = typeof item === 'string' ? item : '';
                     const lines = doc.splitTextToSize(normalizeText(`  - ${displayItem}`), 165);
@@ -3721,7 +3778,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
             }
         });
 
-        // Metas customizadas com atividades alinhadas
+        // Metas customizadas — deduplicação cruzada entre metas
         if (consolidatedAnalysis.goalAlignments.size > 0) {
             yPos += 3;
 
@@ -3731,11 +3788,23 @@ async function generateConsolidatedReport(weeks, periodLabel) {
                     return (order[b.relevance] || 0) - (order[a.relevance] || 0);
                 });
 
+            const usedCustomConsolidatedActs = new Set();
             sortedGoals.forEach(alignment => {
                 if (yPos > 255) { doc.addPage(); yPos = 20; }
 
                 const impactColor = alignment.relevance === 'Alto Impacto' ? [0, 128, 0] :
                                     alignment.relevance === 'Médio Impacto' ? [200, 150, 0] : grey;
+
+                const dedupedActs = [];
+                alignment.activities.forEach(act => {
+                    const norm = act.replace(/\d+/g, '#').substring(0, 40).toLowerCase();
+                    if (!usedCustomConsolidatedActs.has(norm) && !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(act)) {
+                        usedCustomConsolidatedActs.add(norm);
+                        dedupedActs.push(act);
+                    }
+                });
+
+                if (dedupedActs.length === 0) return;
 
                 doc.setTextColor(...green);
                 doc.setFontSize(9);
@@ -3753,16 +3822,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
                 doc.text(normalizeText(`  ${alignment.contribution} | Ativo em ${alignment.weeksActive} semana(s)`), 27, yPos);
                 yPos += 4;
 
-                const dedupedActs = [];
-                const actPrefixes = new Set();
-                alignment.activities.forEach(act => {
-                    const prefix = act.replace(/\d+/g, '#').substring(0, 30);
-                    if (!actPrefixes.has(prefix) && !/reuni[õo]es\/eventos|participação em \d+ reuni/i.test(act)) {
-                        actPrefixes.add(prefix);
-                        dedupedActs.push(act);
-                    }
-                });
-                dedupedActs.forEach(act => {
+                dedupedActs.slice(0, 4).forEach(act => {
                     if (yPos > 275) { doc.addPage(); yPos = 20; }
                     const actLines = doc.splitTextToSize(normalizeText(`    > ${act}`), 155);
                     actLines.forEach(line => {
