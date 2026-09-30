@@ -332,6 +332,206 @@ function formatTextProfessionally(text) {
     return formattedItems.join('\n');
 }
 
+// ===== VALIDAÇÃO E NORMALIZAÇÃO DE CLIENTES =====
+const CLIENT_CONNECTORS = /^(de|do|da|dos|das|e|&)$/i;
+const CLIENT_NON_NAME_WORDS = new Set([
+    'foi', 'fiz', 'dei', 'deu', 'pediu', 'pedi', 'criado', 'criada', 'criei', 'enviei', 'enviou',
+    'solicitou', 'realizei', 'participei', 'apoiei', 'atuei', 'reuniao', 'call', 'alinhamento',
+    'sobre', 'para', 'com', 'sem', 'que', 'nao', 'sim', 'ja', 'hoje', 'ontem', 'amanha',
+    'semana', 'dia', 'mes', 'documento', 'ata', 'timeline', 'apuracao', 'assistida'
+]);
+
+function clientKey(name) {
+    return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function isValidClientName(name) {
+    const n = String(name || '').trim();
+    if (n.length < 2 || n.length > 40) return false;
+    if (!/[A-Za-zÀ-ú]/.test(n)) return false;
+    if (/\d{1,2}\/\d{1,2}/.test(n)) return false;
+    const words = n.split(/[\s/]+/).filter(Boolean);
+    if (words.length > 4) return false;
+    const isProperNoun = words.every((w, i) =>
+        /^[A-ZÀ-Ú0-9]/.test(w) || (i > 0 && i < words.length - 1 && CLIENT_CONNECTORS.test(w))
+    );
+    if (!isProperNoun) return false;
+    if (CLIENT_NON_NAME_WORDS.has(clientKey(words[0]))) return false;
+    return true;
+}
+
+function normalizeClientSet(clients, exclusions = []) {
+    const excluded = new Set(exclusions.map(clientKey));
+    const upperCount = s => (s.match(/[A-ZÀ-Ú]/g) || []).length;
+    const clientMap = new Map();
+    clients.forEach(c => {
+        const name = String(c).trim().replace(/\s+/g, ' ');
+        const key = clientKey(name);
+        if (!isValidClientName(name) || excluded.has(key)) return;
+        const existing = clientMap.get(key);
+        if (!existing || upperCount(name) > upperCount(existing)) clientMap.set(key, name);
+    });
+    const keys = Array.from(clientMap.keys());
+    keys.forEach(key => {
+        if (!clientMap.has(key)) return;
+        if (key.includes('/')) {
+            key.split('/').forEach(part => clientMap.delete(part.trim()));
+            clientMap.delete(key.replace(/\//g, ' '));
+        }
+        keys.forEach(other => {
+            if (other !== key && other.length < key.length &&
+                (key.startsWith(other + ' ') || key.endsWith(' ' + other))) {
+                clientMap.delete(other);
+            }
+        });
+    });
+    return new Set(clientMap.values());
+}
+
+// ===== RESUMO DE AÇÕES POR CLIENTE (relatórios mensais) =====
+function weekStartLabel(record) {
+    const m = String(record.week || '').match(/^(\d{4})-W(\d{1,2})$/);
+    let d = null;
+    if (m) {
+        const jan4 = new Date(+m[1], 0, 4);
+        d = new Date(jan4);
+        d.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (+m[2] - 1) * 7);
+    } else if (record.date) {
+        d = new Date(record.date);
+    }
+    return d && !isNaN(d) ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '';
+}
+
+function extractClientActions(weeks, clients) {
+    const canonical = Array.from(clients);
+    const actions = new Map();
+    if (canonical.length === 0) return actions;
+
+    const resolveClient = rawName => {
+        const key = clientKey(rawName);
+        const parts = key.split('/').map(p => p.trim());
+        return canonical.find(c => {
+            const ck = clientKey(c);
+            return ck === key || ck.split('/').includes(key) || parts.includes(ck) ||
+                ck.startsWith(key + ' ') || ck.endsWith(' ' + key);
+        }) || null;
+    };
+
+    const mentionPatterns = canonical.map(c => {
+        const names = [c, ...c.split('/')].map(n => clientKey(n)).filter(n => n.length > 1);
+        const escaped = [...new Set(names)].map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        return { client: c, regex: new RegExp(`(^|[^a-z0-9])(${escaped.join('|')})([^a-z0-9]|$)`) };
+    });
+
+    const toSentences = text => text
+        .split(/(?<=[.;!?])\s+|\n+/)
+        .map(s => s.replace(/^[\s•*\-–—:]+/, '').replace(/[\s.;,:]+$/, '').trim())
+        .filter(s => s.length >= 5 && /[A-Za-zÀ-ú]/.test(s))
+        .map(s => s.charAt(0).toUpperCase() + s.slice(1));
+
+    const addAction = (client, week, text) => {
+        if (!actions.has(client)) actions.set(client, []);
+        const list = actions.get(client);
+        const key = clientKey(text);
+        if (!list.some(a => clientKey(a.text) === key)) list.push({ week, text });
+    };
+
+    const markerRegex = /(?:^|[\n.;!?•]\s*)((?:[A-ZÀ-Ú0-9][A-Za-zÀ-ú0-9&.\/-]*)(?:\s(?:[A-ZÀ-Ú0-9&][A-Za-zÀ-ú0-9&.\/-]*|de|do|da)){0,3})(?:\s*[—–]\s*|\s+-\s+)/g;
+
+    const sortedWeeks = [...weeks].sort((a, b) => String(a.week || a.date).localeCompare(String(b.week || b.date)));
+    sortedWeeks.forEach(week => {
+        const label = weekStartLabel(week);
+        const blocks = [week.activities, week.deliveries, week.achievements, week.challenges]
+            .filter(Boolean)
+            .join('\n\n')
+            .split(/\n\s*\n/);
+
+        blocks.forEach(block => {
+            const markers = [...block.matchAll(markerRegex)].map(m => ({
+                client: resolveClient(m[1]),
+                start: m.index,
+                contentStart: m.index + m[0].length
+            }));
+
+            const segments = [];
+            const firstStart = markers.length ? markers[0].start : block.length;
+            if (firstStart > 0) segments.push({ client: null, text: block.slice(0, firstStart) });
+            markers.forEach((mk, i) => {
+                const end = i + 1 < markers.length ? markers[i + 1].start : block.length;
+                segments.push({ client: mk.client, text: block.slice(mk.contentStart, end) });
+            });
+
+            segments.forEach(seg => {
+                toSentences(seg.text).forEach(sentence => {
+                    if (seg.client) {
+                        addAction(seg.client, label, sentence);
+                        return;
+                    }
+                    const plain = clientKey(sentence);
+                    mentionPatterns
+                        .filter(p => p.regex.test(plain))
+                        .forEach(p => addAction(p.client, label, sentence));
+                });
+            });
+        });
+    });
+
+    return actions;
+}
+
+function addClientActionsToPDF(doc, weeks, clients, yPos, normalizeText) {
+    const actions = extractClientActions(weeks, clients);
+    if (actions.size === 0) return yPos;
+
+    const clientOrange = [214, 100, 0];
+    const green = [18, 48, 33];
+    const grey = [122, 122, 122];
+
+    if (yPos > 240) { doc.addPage(); yPos = 20; }
+    doc.setFillColor(...clientOrange);
+    doc.rect(15, yPos - 5, 180, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text(normalizeText('RESUMO DE ACOES POR CLIENTE'), 20, yPos);
+    yPos += 11;
+
+    Array.from(actions.keys()).sort((a, b) => a.localeCompare(b, 'pt-BR')).forEach(client => {
+        const items = actions.get(client);
+        if (yPos > 262) { doc.addPage(); yPos = 20; }
+
+        const weeksCount = new Set(items.map(i => i.week)).size;
+        doc.setFillColor(...clientOrange);
+        doc.rect(18, yPos - 3.5, 1.2, 4.5, 'F');
+        doc.setTextColor(...green);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text(normalizeText(client), 21, yPos);
+        const nameWidth = doc.getTextWidth(normalizeText(client));
+        doc.setTextColor(...grey);
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'normal');
+        doc.text(normalizeText(`${items.length} acao(oes) em ${weeksCount} semana(s)`), 21 + nameWidth + 3, yPos);
+        yPos += 5;
+
+        doc.setFontSize(8.5);
+        items.forEach(item => {
+            const prefix = item.week ? `Sem. ${item.week}: ` : '';
+            const lines = doc.splitTextToSize(normalizeText(`${prefix}${item.text}`), 162);
+            lines.forEach((line, idx) => {
+                if (yPos > 275) { doc.addPage(); yPos = 20; }
+                doc.setTextColor(...grey);
+                if (idx === 0) doc.text('-', 24, yPos);
+                doc.text(line, 27, yPos);
+                yPos += 4;
+            });
+        });
+        yPos += 4;
+    });
+
+    return yPos + 6;
+}
+
 // ===== ANÁLISE EXECUTIVA AVANÇADA =====
 function analyzeActivitiesExecutive(weeklyRecord) {
     const analysis = {
@@ -414,22 +614,27 @@ function analyzeActivitiesExecutive(weeklyRecord) {
     const aiInitiatives = ['fiscal sheld', 'tax help', 'ps avaliador de resultados', 'ia de geracao de documentacao'];
     const knownProjects = ['reforma tributaria', 'reforma tributária', 'tax one for sap', 'tax calendar'];
 
-    const allText = [
+    const allTextOriginal = [
         weeklyRecord.activities || '',
         weeklyRecord.achievements || '',
         weeklyRecord.deliveries || '',
         weeklyRecord.learnings || '',
         weeklyRecord.challenges || '',
         weeklyRecord.nextSteps || ''
-    ].join(' ').toLowerCase();
+    ].join(' ');
+    const allText = allTextOriginal.toLowerCase();
 
     // FASE 1: EXTRAÇÃO DE ENTIDADES
 
     // 1A: Detecta clientes da lista conhecida
     knownClients.forEach(client => {
         const escaped = client.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (new RegExp(`\\b${escaped}\\b`, 'i').test(allText)) {
-            const displayName = client.split(/[\s/]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const found = allTextOriginal.match(new RegExp(`\\b${escaped}\\b`, 'i'));
+        if (found) {
+            const asWritten = found[0];
+            const displayName = /[A-ZÀ-Ú]/.test(asWritten)
+                ? asWritten
+                : client.split(/[\s/]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
             analysis.clients.add(displayName);
         }
     });
@@ -455,8 +660,18 @@ function analyzeActivitiesExecutive(weeklyRecord) {
         }
     });
 
-    // 1C: Detecção contextual "cliente X", "projeto do X"
-    const ctxPatterns = /\b(?:cliente|client|projeto(?:\s+do)?)\s+([A-Z][a-zA-ZÀ-ú\s&\-\/\.]{2,25}?)(?:\s*[,;.\-—]|\s+(?:para|no|na|com|sobre|de)\b)/gi;
+    // 1B-2: Mesmo padrão "Cliente — descrição" no meio do texto, logo após fim de frase (ex: "... prazo. Opella — o cliente autorizou")
+    const inlineDash = /[.;!?]\s+((?:[A-ZÀ-Ú0-9][A-Za-zÀ-ú0-9&.\/-]*)(?:\s(?:[A-ZÀ-Ú0-9&][A-Za-zÀ-ú0-9&.\/-]*|de|do|da)){0,3})\s*[—–]\s+/g;
+    [...activitiesRaw.matchAll(inlineDash)].forEach(m => {
+        const candidateName = m[1].trim();
+        const candidateLower = candidateName.toLowerCase();
+        const isNotClient = notClients.some(nc => candidateLower === nc || (nc.length > 3 && candidateLower.includes(nc)));
+        const isProduct = knownProducts.some(p => candidateLower === p.toLowerCase());
+        if (!isNotClient && !isProduct) analysis.clients.add(candidateName);
+    });
+
+    // 1C: Detecção contextual "cliente X" — só captura nome próprio (palavras com inicial maiúscula)
+    const ctxPatterns = /\b(?:[Cc]liente|[Cc]lient|[Cc]ustomer)\s*[:\-–—]?\s+((?:[A-ZÀ-Ú0-9][A-Za-zÀ-ú0-9&.\-]*)(?:[ /](?:[A-ZÀ-Ú0-9][A-Za-zÀ-ú0-9&.\-]*))*)/g;
     let clientMatch;
     while ((clientMatch = ctxPatterns.exec(activitiesRaw)) !== null) {
         const candidateName = clientMatch[1].trim();
@@ -467,52 +682,9 @@ function analyzeActivitiesExecutive(weeklyRecord) {
         }
     }
 
-    // Remove falsos positivos da lista de clientes
-    const allExclusions = [...notClients, ...knownProducts.map(p => p.toLowerCase()), ...aiInitiatives.map(p => p.toLowerCase())];
-    allExclusions.forEach(nc => {
-        analysis.clients.forEach(c => {
-            if (c.toLowerCase() === nc.toLowerCase()) {
-                analysis.clients.delete(c);
-            }
-        });
-    });
-
-    // Deduplicação de clientes: case-insensitive + merge de variantes (Sanofi + Medley + Sanofi/Medley = Sanofi/Medley)
-    const clientMap = new Map();
-    analysis.clients.forEach(c => {
-        const lower = c.toLowerCase().trim();
-        if (!clientMap.has(lower)) {
-            clientMap.set(lower, c);
-        } else {
-            const existing = clientMap.get(lower);
-            const upperCount = s => (s.match(/[A-ZÀ-Ú]/g) || []).length;
-            if (upperCount(c) > upperCount(existing) || c.length > existing.length) {
-                clientMap.set(lower, c);
-            }
-        }
-    });
-    // Remover partes de nomes compostos: se "sanofi/medley" existe, remove "sanofi" e "medley" avulsos
-    const clientKeys = Array.from(clientMap.keys());
-    clientKeys.forEach(key => {
-        if (key.includes('/')) {
-            key.split('/').forEach(part => {
-                const p = part.trim().toLowerCase();
-                if (p !== key && clientMap.has(p)) clientMap.delete(p);
-            });
-        }
-        // "gac motors" existe → remove "gac" avulso
-        clientKeys.forEach(otherKey => {
-            if (otherKey !== key && otherKey.length < key.length && key.startsWith(otherKey + ' ')) {
-                clientMap.delete(otherKey);
-            }
-        });
-        // "sanofi medley" e "sanofi/medley" → keep only "sanofi/medley" (with slash)
-        const withSlash = key.replace(/\s+/g, '/');
-        const withSpace = key.replace(/\//g, ' ');
-        if (withSlash !== key && clientMap.has(withSlash)) clientMap.delete(key);
-        if (withSpace !== key && clientMap.has(withSpace) && key.includes('/')) clientMap.delete(withSpace);
-    });
-    analysis.clients = new Set(clientMap.values());
+    // Remove falsos positivos (datas, frases, produtos) e deduplica variantes (Sanofi + Medley = Sanofi/Medley, Raia = Droga Raia)
+    const allExclusions = [...notClients, ...knownProducts, ...aiInitiatives];
+    analysis.clients = normalizeClientSet(analysis.clients, allExclusions);
 
     knownProducts.forEach(product => {
         const pattern = product.replace(/[-]/g, '[\\-\\s]?').replace(/\s+/g, '\\s+');
@@ -574,6 +746,7 @@ function analyzeActivitiesExecutive(weeklyRecord) {
     }
 
     // Treinamentos e Estudo de Inglês
+    analysis.englishMilestones = [];
     if (/\b(ingl[êe]s|english|curso|treinamento|capacita[çc][ãa]o|certifica[çc][ãa]o|estud|formação|forma[çc][ãa]o|udemy|coursera|alura|duolingo|fluency|speaking|listening|reading|writing|grammar|toefl|ielts|cambridge)/gi.test(allText)) {
         const isEnglish = /\b(ingl[êe]s|english|fluency|speaking|listening|toefl|ielts|cambridge|duolingo)/gi.test(allText);
         const trainingMatches = allText.match(/\b(curso|treinamento|capacita[çc][ãa]o|certifica[çc][ãa]o|estud|ingl[êe]s|english)\b/gi);
@@ -583,6 +756,26 @@ function analyzeActivitiesExecutive(weeklyRecord) {
             isEnglish: isEnglish,
             count: trainingMatches ? trainingMatches.length : 1
         });
+
+        // Detecção de marcos específicos de inglês
+        if (isEnglish) {
+            const levelMatch = allText.match(/(?:ating|alcan[çc]|complet|pass|consegui|obtive|cheguei|subi|evolu[ií])[\w\sãõáéíóúâêîôûàèìòùç]*?\b(n[íi]vel|level)\s*([\w\d]+)/i);
+            if (levelMatch) analysis.englishMilestones.push(`Atingiu nível ${levelMatch[2].toUpperCase()} em Inglês`);
+
+            if (/\b(reuni[ãa]o|meeting|call|apresenta[çc][ãa]o|presentation)\b[\w\sãõáéíóúâêîôûàèìòùç]*?\b(ingl[êe]s|english)/i.test(allText) ||
+                /\b(ingl[êe]s|english)\b[\w\sãõáéíóúâêîôûàèìòùç]*?\b(reuni[ãa]o|meeting|call|apresenta[çc][ãa]o|presentation)/i.test(allText)) {
+                analysis.englishMilestones.push('Participação ativa em reunião/apresentação em Inglês');
+            }
+
+            if (/\b(certific|toefl|ielts|cambridge|prova|exame)\b/i.test(allText)) {
+                const certMatch = allText.match(/\b(toefl|ielts|cambridge|linguaskill)\b/i);
+                analysis.englishMilestones.push(certMatch ? `Certificação ${certMatch[1].toUpperCase()} em andamento` : 'Preparação para certificação em Inglês');
+            }
+
+            if (/\b(conclu[ií]|finaliz|termin|completei)\b[\w\sãõáéíóúâêîôûàèìòùç]*?\b(m[óo]dulo|curso|etapa|fase|unit)/i.test(allText)) {
+                analysis.englishMilestones.push('Conclusão de módulo/etapa do curso de Inglês');
+            }
+        }
     }
 
     // Entregas de Valor (busca entregas concluídas no período)
@@ -711,12 +904,16 @@ function analyzeActivitiesExecutive(weeklyRecord) {
                 usedActivities.add('tests');
             }
 
-            // INGLÊS/CARREIRA: apenas texto simples
+            // INGLÊS/CARREIRA: marcos específicos quando disponíveis
             if (!usedActivities.has('english') && analysis.trainings.length > 0) {
                 const englishTraining = analysis.trainings.find(t => t.isEnglish);
                 if (englishTraining && /ingl[êe]s|english|idioma|l[íi]ngua|proficiency/i.test(goalText)) {
                     relevance = Math.max(relevance, 2);
-                    activities.push('Evolução e estudo de Inglês');
+                    if (analysis.englishMilestones && analysis.englishMilestones.length > 0) {
+                        analysis.englishMilestones.forEach(m => activities.push(m));
+                    } else {
+                        activities.push('Desenvolvimento contínuo em Inglês');
+                    }
                     usedActivities.add('english');
                 } else if (!englishTraining && /capacita|treinamento|curso|certifica|desenvolvimento/i.test(goalText)) {
                     relevance = Math.max(relevance, 2);
@@ -815,7 +1012,11 @@ function analyzeActivitiesExecutive(weeklyRecord) {
     if (analysis.trainings.length > 0) {
         const englishTraining = analysis.trainings.find(t => t.isEnglish);
         if (englishTraining) {
-            summaryParts.push('Desenvolvimento contínuo em Inglês');
+            if (analysis.englishMilestones && analysis.englishMilestones.length > 0) {
+                summaryParts.push(`Inglês: ${analysis.englishMilestones.join('; ')}`);
+            } else {
+                summaryParts.push('Desenvolvimento contínuo em Inglês');
+            }
         } else {
             summaryParts.push('Investimento em capacitação e desenvolvimento profissional');
         }
@@ -2773,6 +2974,7 @@ async function generateMonthlySummary() {
             if (ga.relevance === 'Alto Impacto') existing.relevance = 'Alto Impacto';
         });
     });
+    monthAnalysis.clients = normalizeClientSet(monthAnalysis.clients);
 
     // ===== RESUMO EXECUTIVO DO MÊS =====
     const execParts = [];
@@ -2913,8 +3115,11 @@ async function generateMonthlySummary() {
             doc.text(normalizeText(client), cx + 3, yPos + 1);
             cx += tw + 3;
         });
-        yPos += 8;
+        yPos += 14;
     }
+
+    // ===== RESUMO DE AÇÕES POR CLIENTE =====
+    yPos = addClientActionsToPDF(doc, monthWeeks, monthAnalysis.clients, yPos, normalizeText);
 
     // ===== ENTREGAS DE VALOR =====
     const allValueDeliveries = [...new Set(monthAnalysis.valueDeliveries)];
@@ -3463,6 +3668,7 @@ async function generateConsolidatedReport(weeks, periodLabel) {
             if (ga.relevance === 'Alto Impacto') existing.relevance = 'Alto Impacto';
         });
     });
+    consolidatedAnalysis.clients = normalizeClientSet(consolidatedAnalysis.clients);
 
     // Resumo Executivo Consolidado
     const summaryParts = [];
@@ -3605,8 +3811,11 @@ async function generateConsolidatedReport(weeks, periodLabel) {
             doc.text(normalizeText(client), cx + 3, yPos + 1);
             cx += tw + 3;
         });
-        yPos += 8;
+        yPos += 14;
     }
+
+    // ===== RESUMO DE AÇÕES POR CLIENTE =====
+    yPos = addClientActionsToPDF(doc, weeks, consolidatedAnalysis.clients, yPos, normalizeText);
 
     // ===== ENTREGAS DE VALOR =====
     if (consolidatedAnalysis.valueDeliveries.length > 0) {
